@@ -1,0 +1,21 @@
+{
+  "name": "contracts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@tact-lang/compiler": "^1.6.13",
+    "@ton/core": "^0.62.0",
+    "@ton/crypto": "^3.3.0",
+    "@ton/ton": "^16.0.0",
+    "@types/node": "^24.9.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

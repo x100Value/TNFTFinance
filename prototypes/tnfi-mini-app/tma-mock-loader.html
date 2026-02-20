@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TNFi Mini App (Mock)</title>
+  <link href="build/static/css/main.css" rel="stylesheet" />
+</head>
+<body>
+  <div id="root"></div>
+  <script>
+    window.Telegram = {
+      WebApp: {
+        initDataUnsafe: { user: { id: 1, first_name: 'MockUser' } },
+        themeParams: {
+          bg_color: '#0f172a',
+          text_color: '#f8fafc',
+          link_color: '#38bdf8',
+          button_color: '#22c55e',
+          button_text_color: '#ffffff',
+          header_bg_color: '#111827'
+        },
+        MainButton: {
+          setText: function () {},
+          show: function () {},
+          hide: function () {},
+          onClick: function () {},
+          offClick: function () {}
+        },
+        ready: function () {},
+        setHeaderColor: function () {},
+        setBackgroundColor: function () {},
+        showAlert: function (t) { alert(t); }
+      }
+    };
+  </script>
+  <script src="build/static/js/main.js"></script>
+</body>
+</html>

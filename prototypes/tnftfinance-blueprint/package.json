@@ -1,0 +1,25 @@
+{
+  "name": "tnftfinance",
+  "version": "1.0.0",
+  "description": "TNFT Finance - NFT lending protocol on TON",
+  "main": "index.js",
+  "scripts": {
+    "build": "blueprint build",
+    "test": "blueprint test",
+    "compile": "blueprint build"
+  },
+  "keywords": [
+    "ton",
+    "nft",
+    "defi",
+    "lending"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@ton-community/sandbox": "^0.11.0",
+    "@ton/blueprint": "^0.24.0",
+    "@ton/core": "^0.62.0",
+    "@ton/crypto": "^3.3.0"
+  }
+}

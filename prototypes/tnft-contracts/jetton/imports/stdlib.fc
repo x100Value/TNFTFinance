@@ -1,0 +1,63 @@
+;; Helper functions, custom functions and constants used in FunC contracts
+
+;; ====================================
+;; CONSTANTS AND DATA STRUCTURES
+;; ====================================
+
+const int min_fwd_fee = 30000000; ;; Minimum forwarding fee in nanotons (0.03 TON)
+const int op::excesses = 0xd53276db; ;; Standard excesses response
+
+;; ====================================
+;; ADDRESS AND SLICE HANDLING
+;; ====================================
+
+;; Checks if two addresses are bitwise equal (including workchain and address hash)
+(int) equal_slice_bits(slice a, slice b) asm "SDEQ";
+
+;; Checks if the address is "None" (tag 0)
+(int) is_addr_none(slice addr) {
+  slice s = addr; 
+  return s~load_uint(3) == 0;
+}
+
+;; Gets the workchain ID from a raw address slice
+(int) get_slice_workchain_id(slice addr) {
+  slice s = addr; 
+  int tag = s~load_uint(3);
+  if (tag == 2) { 
+    return s~load_int(8); 
+  }
+  return 0; 
+}
+
+;; Loads a message address from a slice using assembly (LOADANYADDR)
+(slice) load_msg_addr_from_slice(slice s) asm "s>c PUSH s POP c LDMSGADDR SWAP";
+
+;; Helper to create a null cell
+(cell) create_null_cell() asm "NULLSWAP";
+
+;; Loads an optional reference from a slice
+(cell) load_opt_ref_from_slice(slice s) {
+  int has_ref = s~load_uint(1);
+  if (has_ref) {
+    ;; Возврат к стандартному FunC методу, чтобы избежать ошибки с ассемблером
+    return s~load_ref(); 
+  } else {
+    return create_null_cell();
+  }
+}
+
+;; ====================================
+;; UTILITY
+;; ====================================
+
+(cell) send_raw_message(cell msg, int mode) asm "SENDRAWMSG";
+(int) get_balance() asm "MYBALANCE EXTRACT_INT";
+
+;; ====================================
+;; DICTIONARIES
+;; ====================================
+
+(slice, int) dict_get_slice(cell d, int key_len, slice key) asm "DICTGETREF";
+(cell) dict_set_slice(cell d, int key_len, slice key, slice value) asm "DICTSET";
+(cell) dict_delete_slice(cell d, int key_len, slice key) asm "DICTDEL";

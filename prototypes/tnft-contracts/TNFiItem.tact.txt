@@ -1,0 +1,46 @@
+// TNFiItem.tact - Минимальный шаблон контракта NFT-предмета
+import "@stdlib/deploy";
+
+message Deploy {}
+
+contract TNFiItem with Deploy {
+    // Хранилище:
+    index: Int;
+    collection: Address;
+    owner: Address;
+    content: Cell;
+    
+    // Инициализация
+    init(index: Int, collection: Address, owner: Address, content: Cell) {
+        self.index = index;
+        self.collection = collection;
+        self.owner = owner;
+        self.content = content;
+    }
+
+    // --- ГЕТ-МЕТОДЫ ---
+
+•
+•
+•
+•
+view
+•
+get_nft_data():
+•
+(int,
+•
+Address,
+•
+Cell)
+•
+{
+        return (self.index, self.collection, self.owner, self.content);
+    }
+    
+    view get_nft_address(): Adrres {
+        return self.address;
+    }
+    
+    // ⚠️ TODO: Добавить логику для transfer, get_static_data и т.д.
+}
