@@ -103,33 +103,6 @@ type OperatorSuggestion = {
   tone: SuggestionTone;
 };
 
-type TabMode = 'borrower' | 'liquidity';
-
-const STEP_CARDS = [
-  {
-    title: 'Открыл консоль',
-    detail: 'Зашёл в приложение, проверил статус TVL, ожидаемые риски и поля контроля.',
-  },
-  {
-    title: 'Подключил кошелёк',
-    detail: 'Поставил свой TON-кошелёк, выбрал роль заемщика или поставщика ликвидности.',
-  },
-  {
-    title: 'Получил деньги',
-    detail: 'Решил финансировать или взять NFT-залог, получил и отследил сумму.',
-  },
-];
-
-const BORROWER_CABINETS = [
-  { title: 'Личный счёт заемщика', detail: 'Смотрю доступный LTV, срок, APR и решения по части repay.', status: 'Готов к funding' },
-  { title: 'Коллекция NFT', detail: 'Выбран NFT + оценка, цена «сборов» и срок из oracle.', status: '12.8 TON залога' },
-];
-
-const LIQUIDITY_CABINETS = [
-  { title: 'Резерв ликвидности', detail: 'Баланс протокола и блокированная сумма с TVL LP.', status: '52 TON обеспечено' },
-  { title: 'Пульс поставщика', detail: 'Ставка вознаграждения, частота выплат, лимит новых займов.', status: 'APR 14% (сдержан)' },
-];
-
 const STATUS_LABEL: Record<string, string> = {
   '0': 'OPEN',
   '1': 'FUNDED',
@@ -178,11 +151,11 @@ const SECURITY_PRINCIPLES = [
 
 function getInitialTheme(): VisualTheme {
   if (typeof window === 'undefined') {
-    return 'eggshell';
+    return 'graphite';
   }
 
   const url = new URL(window.location.href);
-  return url.searchParams.get('theme') === 'graphite' ? 'graphite' : 'eggshell';
+  return url.searchParams.get('theme') === 'eggshell' ? 'eggshell' : 'graphite';
 }
 
 function parseStackNum(stack: unknown[] | undefined, index: number): number {
@@ -422,7 +395,6 @@ async function readJson(response: Response): Promise<any> {
 function App() {
   const [mode, setMode] = useState<Mode>('demo');
   const [theme, setTheme] = useState<VisualTheme>(() => getInitialTheme());
-  const [activeTab, setActiveTab] = useState<TabMode>('borrower');
   const [userName, setUserName] = useState('Operator');
   const [contractAddress, setContractAddress] = useState(DEFAULT_CONTRACT_ADDRESS);
   const [toncenterApiKey, setToncenterApiKey] = useState('');
@@ -987,15 +959,6 @@ function App() {
           </div>
         </section>
 
-        <section className="three-steps reveal delay-1">
-          {STEP_CARDS.map((step) => (
-            <article key={step.title} className="step-card">
-              <h3>{step.title}</h3>
-              <p>{step.detail}</p>
-            </article>
-          ))}
-        </section>
-
         <section className="mode-bar reveal delay-1">
           <div className="mode-switches">
             <div className="mode-pills">
@@ -1075,139 +1038,90 @@ function App() {
           </div>
         </section>
 
-        <section className="accounts-tabs reveal delay-2">
-          <div className="tab-row">
-            <button
-              className={`tab-pill ${activeTab === 'borrower' ? 'active' : ''}`}
-              onClick={() => setActiveTab('borrower')}
-            >
-              Заёмщик
-            </button>
-            <button
-              className={`tab-pill ${activeTab === 'liquidity' ? 'active' : ''}`}
-              onClick={() => setActiveTab('liquidity')}
-            >
-              Поставщик ликвидности
-            </button>
-          </div>
+        <section className="controls reveal delay-1">
+          {mode === 'live' ? (
+            <>
+              <label className="control-field">
+                <span>Contract</span>
+                <input
+                  value={contractAddress}
+                  onChange={(event) => setContractAddress(event.target.value)}
+                  placeholder="EQ..."
+                  autoComplete="off"
+                />
+              </label>
 
-          <div className="tab-panels">
-            <div className={`tab-panel ${activeTab === 'borrower' ? 'is-active' : ''}`}>
-              <section className="controls">
-                {mode === 'live' ? (
-                  <>
-                    <label className="control-field">
-                      <span>Contract</span>
-                      <input
-                        value={contractAddress}
-                        onChange={(event) => setContractAddress(event.target.value)}
-                        placeholder="EQ..."
-                        autoComplete="off"
-                      />
-                    </label>
+              <label className="control-field">
+                <span>Toncenter API key (optional)</span>
+                <input
+                  value={toncenterApiKey}
+                  onChange={(event) => setToncenterApiKey(event.target.value)}
+                  placeholder="for higher rate limits"
+                  autoComplete="off"
+                />
+              </label>
 
-                    <label className="control-field">
-                      <span>Toncenter API key (optional)</span>
-                      <input
-                        value={toncenterApiKey}
-                        onChange={(event) => setToncenterApiKey(event.target.value)}
-                        placeholder="for higher rate limits"
-                        autoComplete="off"
-                      />
-                    </label>
-
-                    <div className="control-actions">
-                      <button className="btn btn-primary" onClick={() => void refreshSnapshot()} disabled={loading}>
-                        {loading ? 'SYNCING...' : 'REFRESH'}
-                      </button>
-                      <a
-                        className="btn btn-ghost"
-                        href={`${TONSCAN_ADDRESS_PREFIX}${contractAddress.trim()}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        TONSCAN
-                      </a>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <label className="control-field">
-                      <span>Test NFT</span>
-                      <select
-                        value={demo.selectedNftId}
-                        onChange={(event) =>
-                          setDemo((prev) => ({
-                            ...prev,
-                            selectedNftId: event.target.value,
-                          }))
-                        }
-                      >
-                        {demo.nfts.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name} ({item.estimatedTon.toFixed(2)} TON)
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="control-field">
-                      <span>Requested principal (TON)</span>
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.1}
-                        value={demo.requestedPrincipalTon}
-                        onChange={(event) =>
-                          setDemo((prev) => ({
-                            ...prev,
-                            requestedPrincipalTon: roundTon(clampNumber(Number.parseFloat(event.target.value), 0, 999_999)),
-                          }))
-                        }
-                      />
-                    </label>
-
-                    <div className="control-actions">
-                      <button className="btn btn-primary" onClick={onDemoFund}>
-                        TRY FUND
-                      </button>
-                      <button className="btn btn-ghost" onClick={onDemoRepay}>
-                        REPAY
-                      </button>
-                    </div>
-                  </>
-                )}
-              </section>
-
-              <div className="cabinet-grid">
-                {BORROWER_CABINETS.map((cabinet) => (
-                  <article key={cabinet.title} className="cabinet-card">
-                    <h4>{cabinet.title}</h4>
-                    <p>{cabinet.detail}</p>
-                    <span>{cabinet.status}</span>
-                  </article>
-                ))}
+              <div className="control-actions">
+                <button className="btn btn-primary" onClick={() => void refreshSnapshot()} disabled={loading}>
+                  {loading ? 'SYNCING...' : 'REFRESH'}
+                </button>
+                <a
+                  className="btn btn-ghost"
+                  href={`${TONSCAN_ADDRESS_PREFIX}${contractAddress.trim()}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  TONSCAN
+                </a>
               </div>
-            </div>
+            </>
+          ) : (
+            <>
+              <label className="control-field">
+                <span>Test NFT</span>
+                <select
+                  value={demo.selectedNftId}
+                  onChange={(event) =>
+                    setDemo((prev) => ({
+                      ...prev,
+                      selectedNftId: event.target.value,
+                    }))
+                  }
+                >
+                  {demo.nfts.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} ({item.estimatedTon.toFixed(2)} TON)
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            <div className={`tab-panel ${activeTab === 'liquidity' ? 'is-active' : ''}`}>
-              <div className="cabinet-grid">
-                {LIQUIDITY_CABINETS.map((cabinet) => (
-                  <article key={cabinet.title} className="cabinet-card">
-                    <h4>{cabinet.title}</h4>
-                    <p>{cabinet.detail}</p>
-                    <span>{cabinet.status}</span>
-                  </article>
-                ))}
-              </div>
-              <div className="liquidity-actions">
-                <p>Поддерживаю протокол, управляю TVL и выпускаю кредиты заемщикам.</p>
+              <label className="control-field">
+                <span>Requested principal (TON)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={demo.requestedPrincipalTon}
+                  onChange={(event) =>
+                    setDemo((prev) => ({
+                      ...prev,
+                      requestedPrincipalTon: roundTon(clampNumber(Number.parseFloat(event.target.value), 0, 999_999)),
+                    }))
+                  }
+                />
+              </label>
+
+              <div className="control-actions">
                 <button className="btn btn-primary" onClick={onDemoFund}>
-                  Пополнить пул
+                  TRY FUND
+                </button>
+                <button className="btn btn-ghost" onClick={onDemoRepay}>
+                  REPAY
                 </button>
               </div>
-            </div>
-          </div>
+            </>
+          )}
         </section>
 
         {mode === 'live' && error && (

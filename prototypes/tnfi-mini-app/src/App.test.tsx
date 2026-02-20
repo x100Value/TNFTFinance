@@ -143,7 +143,7 @@ function setToggle(label: RegExp, checked: boolean): void {
 test('demo sandbox: success path fund then repay', async () => {
   render(<App />);
 
-  expect(screen.getByText(/Eggshell Credit Console/i)).toBeInTheDocument();
+  expect(screen.getByText(/TNFT Credit Console/i)).toBeInTheDocument();
   expect(screen.getAllByText(/DEMO SANDBOX/i).length).toBeGreaterThan(0);
   expect(global.fetch).not.toHaveBeenCalled();
 
