@@ -26,4 +26,4 @@ Use this file to track every public testnet deployment.
 - Deployment tx hash: n/a (contract already active on testnet)
 - Explorer link: https://testnet.tonscan.org/address/EQAIYlrr3UiMJ9fqI-B4j2nJdiiD7WzyaNL1MX_wiONc4OUi
 - Run log file: local only (`docs/deployments/testnet-run-*.log`, ignored by git)
-- Notes: Reproducible deploy script validated; it correctly detects active deployment and exits safely.
+- Notes: Reproducible deploy script validated; it correctly detects active deployment and exits safely. Verified via Toncenter (`state=active`) on 2026-02-20.
