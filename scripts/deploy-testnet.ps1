@@ -53,9 +53,9 @@ try {
     npm ci
     npm run compile
 
-    $deployCmd = "npm exec -- blueprint run deployNFTCollateralLoan --custom https://testnet.toncenter.com/api/v2/jsonRPC --custom-version v2 --custom-type testnet --mnemonic"
+    $deployCmd = "npm exec -- blueprint run deployNFTCollateralLoan --testnet --mnemonic"
     if ($env:TONCENTER_API_KEY) {
-        $deployCmd += " --custom-key $($env:TONCENTER_API_KEY)"
+        $deployCmd = "npm exec -- blueprint run deployNFTCollateralLoan --custom https://testnet.toncenter.com/api/v2/jsonRPC --custom-version v2 --custom-type testnet --mnemonic --custom-key $($env:TONCENTER_API_KEY)"
     }
 
     & cmd /c $deployCmd 2>&1 | Tee-Object -FilePath $runLog

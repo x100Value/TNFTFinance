@@ -3,7 +3,12 @@ import { NetworkProvider } from '@ton/blueprint';
 import { NFTCollateralLoan } from '../build/NFTCollateralLoan/NFTCollateralLoan_NFTCollateralLoan';
 
 export async function run(provider: NetworkProvider) {
-    const nFTCollateralLoan = provider.open(await NFTCollateralLoan.fromInit());
+    const senderAddress = provider.sender().address;
+    if (!senderAddress) {
+        throw new Error('Sender address is required for deploy');
+    }
+
+    const nFTCollateralLoan = provider.open(await NFTCollateralLoan.fromInit(senderAddress));
     const contractAddress = nFTCollateralLoan.address.toString();
 
     provider.ui().write(`Network: ${provider.network()}`);

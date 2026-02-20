@@ -9,10 +9,9 @@ describe('NFTCollateralLoan', () => {
 
     beforeEach(async () => {
         blockchain = await Blockchain.create();
-
-        nFTCollateralLoan = blockchain.openContract(await NFTCollateralLoan.fromInit());
-
         deployer = await blockchain.treasury('deployer');
+
+        nFTCollateralLoan = blockchain.openContract(await NFTCollateralLoan.fromInit(deployer.address));
 
         const deployResult = await nFTCollateralLoan.send(
             deployer.getSender(),

@@ -18,12 +18,12 @@ Use this file to track every public testnet deployment.
 ## Entries
 
 - Date (UTC): 2026-02-20
-- Commit: cf01f38
+- Commit: local workspace (2026-02-20), see subsequent commits on `main`
 - Deployer wallet (public address): EQBuVfeIXD-R8aYsm8P9PT5s-CEdO83Oy90Ppccw3mlJQ3TB (validation wallet)
-- Network endpoint: https://testnet.toncenter.com/api/v2/jsonRPC
+- Network endpoint: https://testnet.toncenter.com/api/v2/jsonRPC (default `--testnet` used)
 - Contract: NFTCollateralLoan
-- Contract address: EQAIYlrr3UiMJ9fqI-B4j2nJdiiD7WzyaNL1MX_wiONc4OUi
-- Deployment tx hash: n/a (contract already active on testnet)
-- Explorer link: https://testnet.tonscan.org/address/EQAIYlrr3UiMJ9fqI-B4j2nJdiiD7WzyaNL1MX_wiONc4OUi
+- Contract address: EQD3jGq2xrN8LkvD4Sk-3EwZy8568miPnfaU3vVWIDW7hEtJ
+- Deployment tx hash: i92bKEku43DWd1+mUtk3EBmM7/Mgew5n5Mb5R2WqRAU=
+- Explorer link: https://testnet.tonscan.org/address/EQD3jGq2xrN8LkvD4Sk-3EwZy8568miPnfaU3vVWIDW7hEtJ
 - Run log file: local only (`docs/deployments/testnet-run-*.log`, ignored by git)
-- Notes: Reproducible deploy script validated; it correctly detects active deployment and exits safely. Verified via Toncenter (`state=active`) on 2026-02-20.
+- Notes: Reproducible deploy script validated; contract deployed and verified via Toncenter (`state=active`) on 2026-02-20.

@@ -7,12 +7,16 @@
 // and will enjoy storage write optimizations and use less gas overall.
 //
 // See: https://docs.tact-lang.org/book/contracts/#parameters
-contract NFTCollateralLoan() {
+contract NFTCollateralLoan(owner: Address) {
     // Empty receiver for the deployment,
     // which expects the `null` message body
     receive() {
         // Forward the remaining value in the
         // incoming message back to the sender
         cashback(sender());
+    }
+
+    get fun get_owner(): Address {
+        return self.owner;
     }
 }
