@@ -11,6 +11,7 @@ yarn-error.log*
 build/
 dist/
 coverage/
+docs/deployments/testnet-run-*.log
 *.boc
 *.fif
 *.pkg

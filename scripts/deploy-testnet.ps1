@@ -43,7 +43,7 @@ if (-not $env:WALLET_MNEMONIC) {
 }
 
 if (-not $env:WALLET_VERSION) {
-    throw "WALLET_VERSION is missing in .env.local (example: v4r2)"
+    throw "WALLET_VERSION is missing in .env.local (example: v4)"
 }
 
 New-Item -ItemType Directory -Force -Path $deploymentsDir | Out-Null
@@ -53,23 +53,12 @@ try {
     npm ci
     npm run compile
 
-    $runArgs = @(
-        "blueprint",
-        "run",
-        "deployNFTCollateralLoan",
-        "--testnet",
-        "--mnemonic",
-        "--custom",
-        "https://testnet.toncenter.com/api/v2/jsonRPC",
-        "--custom-version",
-        "v2"
-    )
-
+    $deployCmd = "npm exec -- blueprint run deployNFTCollateralLoan --custom https://testnet.toncenter.com/api/v2/jsonRPC --custom-version v2 --custom-type testnet --mnemonic"
     if ($env:TONCENTER_API_KEY) {
-        $runArgs += @("--custom-key", $env:TONCENTER_API_KEY)
+        $deployCmd += " --custom-key $($env:TONCENTER_API_KEY)"
     }
 
-    & npx @runArgs 2>&1 | Tee-Object -FilePath $runLog
+    & cmd /c $deployCmd 2>&1 | Tee-Object -FilePath $runLog
     if ($LASTEXITCODE -ne 0) {
         throw "Deploy failed. See log: $runLog"
     }

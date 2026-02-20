@@ -18,12 +18,12 @@ Use this file to track every public testnet deployment.
 ## Entries
 
 - Date (UTC): 2026-02-20
-- Commit: 925667c
-- Deployer wallet (public address): pending
+- Commit: cf01f38
+- Deployer wallet (public address): EQBuVfeIXD-R8aYsm8P9PT5s-CEdO83Oy90Ppccw3mlJQ3TB (validation wallet)
 - Network endpoint: https://testnet.toncenter.com/api/v2/jsonRPC
 - Contract: NFTCollateralLoan
-- Contract address: pending
-- Deployment tx hash: pending
-- Explorer link: pending
-- Run log file: pending
-- Notes: CI and deploy flow prepared; waiting for fresh mnemonic wallet and testnet funds.
+- Contract address: EQAIYlrr3UiMJ9fqI-B4j2nJdiiD7WzyaNL1MX_wiONc4OUi
+- Deployment tx hash: n/a (contract already active on testnet)
+- Explorer link: https://testnet.tonscan.org/address/EQAIYlrr3UiMJ9fqI-B4j2nJdiiD7WzyaNL1MX_wiONc4OUi
+- Run log file: local only (`docs/deployments/testnet-run-*.log`, ignored by git)
+- Notes: Reproducible deploy script validated; it correctly detects active deployment and exits safely.

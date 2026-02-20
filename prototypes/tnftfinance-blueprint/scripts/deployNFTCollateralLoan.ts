@@ -1,6 +1,6 @@
 import { toNano } from '@ton/core';
-import { NFTCollateralLoan } from '../build/NFTCollateralLoan/NFTCollateralLoan_NFTCollateralLoan';
 import { NetworkProvider } from '@ton/blueprint';
+import { NFTCollateralLoan } from '../build/NFTCollateralLoan/NFTCollateralLoan_NFTCollateralLoan';
 
 export async function run(provider: NetworkProvider) {
     const nFTCollateralLoan = provider.open(await NFTCollateralLoan.fromInit());
