@@ -5,9 +5,11 @@
   "main": "index.js",
   "scripts": {
     "build": "npx tact -c tact.config.json",
-    "test": "node tests/simple-test.js",
+    "test": "npm run test:artifacts && npm run test:safety",
+    "test:artifacts": "node tests/simple-test.js",
+    "test:safety": "node -r ts-node/register tests/mvp-safety-check.ts",
     "compile": "npx tact -c tact.config.json",
-    "deploy:testnet": "npx blueprint run deployNFTCollateralLoan --testnet --mnemonic"
+    "deploy:testnet": "npm exec -- blueprint run deployNFTCollateralLoan --testnet --mnemonic"
   },
   "keywords": [
     "ton",

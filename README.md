@@ -5,6 +5,7 @@ This repository is a sanitized baseline prepared for secure development.
 ## Structure
 - `docs/` - specs, security rules, checklists.
 - `docs/deployments/` - testnet deployment records and logs.
+- `docs/MVP_TESTNET_CHECKLIST.md` - security-first execution checklist for MVP.
 - `prototypes/tnft-contracts/` - NFT collection prototype contracts.
 - `prototypes/tnftfinance-blueprint/` - lending protocol prototype (Blueprint/Tact).
 - `prototypes/tnfi-mini-app/` - Telegram Mini App prototype.
