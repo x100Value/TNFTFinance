@@ -1,14 +1,33 @@
-console.log('SUCCESS! NFTCollateralLoan contract is ready!');
-console.log('');
-console.log('? Contract compiled successfully');
-console.log('? Project structure is correct');
-console.log('? Dependencies installed');
-console.log('');
-console.log('NEXT STEPS FOR TNFT FINANCE:');
-console.log('   1. Add more contract functionality');
-console.log('   2. Write comprehensive tests');
-console.log('   3. Deploy to TON testnet');
-console.log('   4. Create frontend interface');
-console.log('   5. Integrate with Telegram Mini Apps');
-console.log('');
-console.log('Your TNFT Finance protocol foundation is ready!');
+const fs = require('fs');
+const path = require('path');
+
+const buildDir = path.join(__dirname, '..', 'build', 'NFTCollateralLoan');
+const requiredArtifacts = [
+  'NFTCollateralLoan_NFTCollateralLoan.abi',
+  'NFTCollateralLoan_NFTCollateralLoan.code.boc',
+  'NFTCollateralLoan_NFTCollateralLoan.fc',
+  'NFTCollateralLoan_NFTCollateralLoan.ts',
+];
+
+function fail(message) {
+  console.error(`FAIL: ${message}`);
+  process.exit(1);
+}
+
+if (!fs.existsSync(buildDir)) {
+  fail(`Build directory is missing: ${buildDir}`);
+}
+
+for (const file of requiredArtifacts) {
+  const fullPath = path.join(buildDir, file);
+  if (!fs.existsSync(fullPath)) {
+    fail(`Missing artifact: ${file}`);
+  }
+
+  const stat = fs.statSync(fullPath);
+  if (stat.size === 0) {
+    fail(`Artifact is empty: ${file}`);
+  }
+}
+
+console.log('PASS: Blueprint compile artifacts are present and non-empty.');

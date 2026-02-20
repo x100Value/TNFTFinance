@@ -6,7 +6,7 @@ import "./TNFiItem.tact"; // Импорт кода NFT-предмета
 // --- КОНСТАНТЫ: ВЛАДЕЛЕЦ И КЛЮЧИ ---
 
 // Адрес Владельца (Ваш НОВЫЙ кошелек Testnet)
-const OWNER_ADDRESS: Address = Address.parse("0:41242055e8ff9935f875866183970a2d049f8b498b4ad39e97c949f5795f7a41"); 
+const OWNER_ADDRESS: Address = address("0:41242055e8ff9935f875866183970a2d049f8b498b4ad39e97c949f5795f7a41"); 
 
 // Публичный ключ Владельца 
 const OWNER_PUBLIC_KEY: Int = 0xc22e188b3e31a183723232edf0718fcf9a6bbf54e299b52a25deb2e1d35bbafc;
@@ -17,9 +17,16 @@ const DAO_ADDRESS: Address = OWNER_ADDRESS;
 
 
 // --- ХРАНИЛИЩЕ КОНТРАКТА (Storage) ---
-message Deploy {}
 
-contract TNFiMaster with Deploy {
+struct CollectionData {
+    next_item_index: Int;
+    owner: Address;
+    collection_address: Address;
+    treasury_address: Address;
+    nft_item_code: Cell;
+}
+
+contract TNFiMaster {
     owner: Address;
     next_item_index: Int;
     nft_item_code: Cell; // Код контракта NFT-предмета
@@ -33,18 +40,20 @@ contract TNFiMaster with Deploy {
     // --- ГЕТ-МЕТОДЫ ---
     
     // Метод для получения данных коллекции (ИСПРАВЛЕНО: добавлен пробел)
-    get get_collection_data(): (Int, Address, Address, Address, Cell) {
-        return (self.next_item_index, self.owner, self.address, TREASURY_ADDRESS, self.nft_item_code);
+    get fun get_collection_data(): CollectionData {
+        return CollectionData{
+            next_item_index: self.next_item_index,
+            owner: self.owner,
+            collection_address: myAddress(),
+            treasury_address: TREASURY_ADDRESS,
+            nft_item_code: self.nft_item_code
+        };
     }
     
     // Метод для вычисления адреса NFT-предмета (ИСПРАВЛЕНО: добавлен пробел)
-    // Используем стандартную функцию calculate_nft_address, которая доступна благодаря @stdlib/deploy
-    get get_nft_address_by_index(item_index: Int): Address {
-        return calculate_nft_address(
-            self.nft_item_code,
-            self.address,
-            item_index
-        );
+    // Заглушка: точный расчет адреса будет добавлен после финализации логики минта.
+    get fun get_nft_address_by_index(item_index: Int): Address {
+        return myAddress();
     }
     
     // --- ПРИЕМ ВХОДЯЩИХ СООБЩЕНИЙ ---

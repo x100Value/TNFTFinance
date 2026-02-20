@@ -1,8 +1,6 @@
 // TNFiItem.tact - Minimal NFT item contract prototype
 import "@stdlib/deploy";
 
-message Deploy {}
-
 message Transfer {
     query_id: Int;
     new_owner: Address;
@@ -16,7 +14,14 @@ message OwnershipTransferred {
     new_owner: Address;
 }
 
-contract TNFiItem with Deploy {
+struct NftData {
+    index: Int;
+    collection: Address;
+    owner: Address;
+    content: Cell;
+}
+
+contract TNFiItem {
     index: Int;
     collection: Address;
     owner: Address;
@@ -29,12 +34,17 @@ contract TNFiItem with Deploy {
         self.content = content;
     }
 
-    view get_nft_data(): (Int, Address, Address, Cell) {
-        return (self.index, self.collection, self.owner, self.content);
+    get fun get_nft_data(): NftData {
+        return NftData{
+            index: self.index,
+            collection: self.collection,
+            owner: self.owner,
+            content: self.content
+        };
     }
 
-    view get_nft_address(): Address {
-        return self.address;
+    get fun get_nft_address(): Address {
+        return myAddress();
     }
 
     receive(msg: Transfer) {
@@ -43,7 +53,7 @@ contract TNFiItem with Deploy {
         let prevOwner: Address = self.owner;
         self.owner = msg.new_owner;
 
-        if (msg.response_destination != self.address) {
+        if (msg.response_destination != myAddress()) {
             send(SendParameters{
                 to: msg.response_destination,
                 value: 0,
@@ -60,14 +70,12 @@ contract TNFiItem with Deploy {
             bounce: true
         });
 
-        if (!msg.forward_payload.isEmpty()) {
-            send(SendParameters{
-                to: self.owner,
-                value: msg.forward_amount,
-                mode: SendIgnoreErrors,
-                body: msg.forward_payload,
-                bounce: true
-            });
-        }
+        send(SendParameters{
+            to: self.owner,
+            value: msg.forward_amount,
+            mode: SendIgnoreErrors,
+            body: msg.forward_payload,
+            bounce: true
+        });
     }
 }

@@ -4,6 +4,16 @@ import { NetworkProvider } from '@ton/blueprint';
 
 export async function run(provider: NetworkProvider) {
     const nFTCollateralLoan = provider.open(await NFTCollateralLoan.fromInit());
+    const contractAddress = nFTCollateralLoan.address.toString();
+
+    provider.ui().write(`Network: ${provider.network()}`);
+    provider.ui().write(`Target address: ${contractAddress}`);
+
+    const alreadyDeployed = await provider.isContractDeployed(nFTCollateralLoan.address);
+    if (alreadyDeployed) {
+        provider.ui().write('Contract is already deployed, skipping deploy transaction.');
+        return;
+    }
 
     await nFTCollateralLoan.send(
         provider.sender(),
@@ -14,6 +24,5 @@ export async function run(provider: NetworkProvider) {
     );
 
     await provider.waitForDeploy(nFTCollateralLoan.address);
-
-    // run methods on `nFTCollateralLoan`
+    provider.ui().write(`Deployed NFTCollateralLoan at: ${contractAddress}`);
 }
