@@ -17,10 +17,10 @@ Status: Draft for implementation (single safe baseline)
 - Protocol fees and debt accounting are in `USDT` (not in volatile governance token).
 
 ## 3) Safe Risk Parameters (v1 baseline)
-- `MAX_LTV_OPEN = 35%`
-- `LTV_MARGIN_CALL = 50%`
-- `LTV_LIQUIDATION = 55%`
-- `LTV_EMERGENCY_PAUSE = 65%` (new loans paused for this pool)
+- `MAX_LTV_OPEN` set conservatively per pool (kept in private risk config).
+- `LTV_MARGIN_CALL` set per pool (private risk config).
+- `LTV_LIQUIDATION` set per pool (private risk config).
+- `LTV_EMERGENCY_PAUSE` set per pool (new loans paused when exceeded).
 - `MAX_LOAN_TERM = 30 days`
 - `ORACLE_HEARTBEAT_MAX_AGE = 10 minutes`
 - `ORACLE_QUORUM = 2 of 3`
@@ -76,4 +76,3 @@ Status: Draft for implementation (single safe baseline)
 - Step B: implement minimal contracts (`CollateralLoan`, `LiquidityPool`, oracle adapter).
 - Step C: write tests for liquidation and rounding first.
 - Step D: deploy to testnet and publish artifacts.
-
