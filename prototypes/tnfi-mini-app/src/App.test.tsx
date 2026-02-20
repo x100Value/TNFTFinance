@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App from './App';
 
 jest.mock('@twa-dev/sdk', () => ({
@@ -124,14 +124,128 @@ afterEach(() => {
   jest.resetAllMocks();
 });
 
-test('renders TNFT control surface and loads state', async () => {
+function clickMainButton(name: RegExp): void {
+  fireEvent.click(screen.getAllByRole('button', { name })[0]);
+}
+
+function setInput(label: RegExp, value: string): void {
+  const input = screen.getByLabelText(label) as HTMLInputElement;
+  fireEvent.change(input, { target: { value } });
+}
+
+function setToggle(label: RegExp, checked: boolean): void {
+  const toggle = screen.getByLabelText(label) as HTMLInputElement;
+  if (toggle.checked !== checked) {
+    fireEvent.click(toggle);
+  }
+}
+
+test('demo sandbox: success path fund then repay', async () => {
   render(<App />);
 
   expect(screen.getByText(/Eggshell Credit Console/i)).toBeInTheDocument();
+  expect(screen.getAllByText(/DEMO SANDBOX/i).length).toBeGreaterThan(0);
+  expect(global.fetch).not.toHaveBeenCalled();
+
+  clickMainButton(/TRY FUND/i);
+  await waitFor(() => {
+    expect(screen.getAllByText(/FUNDED/i).length).toBeGreaterThan(0);
+  });
+
+  clickMainButton(/REPAY/i);
+  await waitFor(() => {
+    expect(screen.getAllByText(/REPAID/i).length).toBeGreaterThan(0);
+  });
+});
+
+test('demo sandbox: blocks funding when oracle is stale', async () => {
+  render(<App />);
+
+  setToggle(/Oracle fresh/i, false);
+  clickMainButton(/TRY FUND/i);
+
+  await waitFor(() => {
+    expect(screen.getByText(/Funding blocked: oracle data is stale\./i)).toBeInTheDocument();
+  });
+});
+
+test('demo sandbox: blocks funding when paused', async () => {
+  render(<App />);
+
+  setToggle(/Pause funding/i, true);
+  clickMainButton(/TRY FUND/i);
+
+  await waitFor(() => {
+    expect(screen.getByText(/Funding blocked: pause flag is active\./i)).toBeInTheDocument();
+  });
+});
+
+test('demo sandbox: blocks funding on LTV breach', async () => {
+  render(<App />);
+
+  setInput(/Requested principal \(TON\)/i, '15');
+  clickMainButton(/TRY FUND/i);
+
+  await waitFor(() => {
+    expect(screen.getByText(/Funding blocked: LTV breach/i)).toBeInTheDocument();
+  });
+});
+
+test('demo sandbox: blocks funding on low treasury liquidity', async () => {
+  render(<App />);
+
+  setInput(/Treasury TON/i, '1');
+  clickMainButton(/TRY FUND/i);
+
+  await waitFor(() => {
+    expect(screen.getByText(/Funding blocked: treasury liquidity is too low\./i)).toBeInTheDocument();
+  });
+});
+
+test('demo sandbox: blocks repay when wallet is insufficient', async () => {
+  render(<App />);
+
+  setInput(/Wallet TON/i, '0');
+  clickMainButton(/TRY FUND/i);
+
+  await waitFor(() => {
+    expect(screen.getAllByText(/FUNDED/i).length).toBeGreaterThan(0);
+  });
+
+  clickMainButton(/REPAY/i);
+
+  await waitFor(() => {
+    expect(screen.getByText(/Repay blocked: wallet/i)).toBeInTheDocument();
+  });
+});
+
+test('demo sandbox: supports liquidation and reopening new round', async () => {
+  render(<App />);
+
+  clickMainButton(/TRY FUND/i);
+  await waitFor(() => {
+    expect(screen.getAllByText(/FUNDED/i).length).toBeGreaterThan(0);
+  });
+
+  fireEvent.click(screen.getByRole('button', { name: /FORCE LIQUIDATE/i }));
+  await waitFor(() => {
+    expect(screen.getAllByText(/LIQUIDATED/i).length).toBeGreaterThan(0);
+  });
+
+  fireEvent.click(screen.getByRole('button', { name: /NEW ROUND/i }));
+  await waitFor(() => {
+    expect(screen.getAllByText(/OPEN/i).length).toBeGreaterThan(0);
+  });
+});
+
+test('switches to live mode and fetches on-chain state', async () => {
+  render(<App />);
+
+  fireEvent.click(screen.getByRole('button', { name: /LIVE RPC/i }));
 
   await waitFor(() => {
     expect(screen.getAllByText(/ACTIVE/i).length).toBeGreaterThan(0);
   });
 
-  expect(screen.getByText(/FUNDED/i)).toBeInTheDocument();
+  expect(global.fetch).toHaveBeenCalled();
 });

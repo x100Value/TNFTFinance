@@ -4,9 +4,12 @@ import './App.css';
 
 const TONCENTER_JSON_RPC = 'https://testnet.toncenter.com/api/v2/jsonRPC';
 const TONSCAN_ADDRESS_PREFIX = 'https://testnet.tonscan.org/address/';
+const SECONDS_PER_YEAR = 365 * 24 * 60 * 60;
 
-const DEFAULT_CONTRACT_ADDRESS = 'EQBVuxKDAts-fESLPfc1geFEu-C7aj5rawG_HvUxmtZljqTO';
-const EXPECTED_OWNER_ADDRESS = 'EQBuVfeIXD-R8aYsm8P9PT5s-CEdO83Oy90Ppccw3mlJQ3TB';
+const DEFAULT_CONTRACT_ADDRESS = 'EQDNj4-A8lILD6G3YXvEQWbMreziRuCGkbu2Tbb6xuPJjQUE';
+const EXPECTED_OWNER_ADDRESS = 'UQCQ4dGD-gm1VS7UkPZtvPZwmXzAUzokZ1HS551IcwQ_KYXA';
+
+type Mode = 'demo' | 'live';
 
 type AddressInfoResult = {
   state?: string;
@@ -55,6 +58,41 @@ type Snapshot = {
   fetchedAt: number;
 };
 
+type DemoNft = {
+  id: string;
+  name: string;
+  collection: string;
+  estimatedTon: number;
+  address: string;
+};
+
+type DemoLoan = {
+  nftId: string;
+  principalTon: number;
+  repayDueTon: number;
+  startedAt: number;
+  dueAt: number;
+  ltvBpsAtOpen: number;
+};
+
+type DemoState = {
+  walletTon: number;
+  treasuryTon: number;
+  nfts: DemoNft[];
+  selectedNftId: string;
+  requestedPrincipalTon: number;
+  requestedTermHours: number;
+  requestedAprBps: number;
+  oracleFresh: boolean;
+  paused: boolean;
+  oracleHaircutBps: number;
+  maxLtvBps: number;
+  status: number;
+  loan: DemoLoan | null;
+  riskVersion: number;
+  actionLog: string[];
+};
+
 const STATUS_LABEL: Record<string, string> = {
   '0': 'OPEN',
   '1': 'FUNDED',
@@ -62,6 +100,37 @@ const STATUS_LABEL: Record<string, string> = {
   '3': 'LIQUIDATED',
   '4': 'CANCELLED',
 };
+
+const DEMO_NFTS: DemoNft[] = [
+  {
+    id: 'nft-01',
+    name: 'Wall Street Card #01',
+    collection: 'Executive Objects',
+    estimatedTon: 9.6,
+    address: 'EQDemoSandboxNft0001',
+  },
+  {
+    id: 'nft-02',
+    name: 'Wall Street Card #02',
+    collection: 'Executive Objects',
+    estimatedTon: 14.2,
+    address: 'EQDemoSandboxNft0002',
+  },
+  {
+    id: 'nft-03',
+    name: 'Bone Folder #07',
+    collection: 'Office Artefacts',
+    estimatedTon: 22.9,
+    address: 'EQDemoSandboxNft0003',
+  },
+  {
+    id: 'nft-04',
+    name: 'Black Tie #13',
+    collection: 'Evening Uniform',
+    estimatedTon: 6.8,
+    address: 'EQDemoSandboxNft0004',
+  },
+];
 
 function parseStackNum(stack: unknown[] | undefined, index: number): number {
   const item = stack?.[index];
@@ -207,6 +276,88 @@ function getRiskWindow(snapshot: Snapshot | null): string {
   return `Applies in ${formatSeconds(snapshot.risk.pendingEta - now)}`;
 }
 
+function roundTon(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.round(value * 1000) / 1000;
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  return Math.min(max, Math.max(min, value));
+}
+
+function toNano(valueTon: number): number {
+  return Math.round(clampNumber(valueTon, 0, 1_000_000) * 1_000_000_000);
+}
+
+function appendLog(entries: string[], message: string): string[] {
+  const stamp = new Date().toLocaleTimeString('ru-RU', { hour12: false });
+  return [`${stamp} ${message}`, ...entries].slice(0, 12);
+}
+
+function createDemoState(): DemoState {
+  return {
+    walletTon: 18.5,
+    treasuryTon: 220,
+    nfts: DEMO_NFTS,
+    selectedNftId: DEMO_NFTS[0]?.id ?? '',
+    requestedPrincipalTon: 4.2,
+    requestedTermHours: 24,
+    requestedAprBps: 1400,
+    oracleFresh: true,
+    paused: false,
+    oracleHaircutBps: 0,
+    maxLtvBps: 5500,
+    status: 0,
+    loan: null,
+    riskVersion: 1,
+    actionLog: ['Sandbox booted with fan assets only.'],
+  };
+}
+
+function buildDemoSnapshot(demo: DemoState): Snapshot {
+  const now = Math.floor(Date.now() / 1000);
+  const selectedNft = demo.nfts.find((item) => item.id === demo.selectedNftId) ?? null;
+  const loanNft = demo.loan ? demo.nfts.find((item) => item.id === demo.loan?.nftId) ?? null : null;
+  const priceSource = loanNft ?? selectedNft;
+  const pricedTon = priceSource
+    ? roundTon((priceSource.estimatedTon * (10_000 - demo.oracleHaircutBps)) / 10_000)
+    : 0;
+  const oracleUpdatedAt = now - (demo.oracleFresh ? 25 : 3600);
+
+  return {
+    accountState: 'active',
+    balanceNano: toNano(demo.treasuryTon),
+    lastTxHash: `demo-${demo.riskVersion}-${demo.status}`,
+    lastTxLt: String(Date.now()),
+    ownerCell: 'demo-owner-cell',
+    loan: {
+      status: demo.status,
+      lenderCell: demo.loan ? `demo-lender-${demo.loan.nftId}` : '',
+      startedAt: demo.loan?.startedAt ?? 0,
+      dueAt: demo.loan?.dueAt ?? 0,
+      oraclePrice: toNano(pricedTon),
+      oracleUpdatedAt,
+      paused: demo.paused,
+      oracleFresh: demo.oracleFresh,
+    },
+    risk: {
+      maxLtvBps: demo.maxLtvBps,
+      oracleMaxAge: 900,
+      riskTimelock: 43_200,
+      pendingMaxLtvBps: 0,
+      pendingOracleMaxAge: 0,
+      pendingEta: 0,
+      riskVersion: demo.riskVersion,
+    },
+    fetchedAt: Date.now(),
+  };
+}
+
 async function readJson(response: Response): Promise<any> {
   try {
     return await response.json();
@@ -216,12 +367,14 @@ async function readJson(response: Response): Promise<any> {
 }
 
 function App() {
+  const [mode, setMode] = useState<Mode>('demo');
   const [userName, setUserName] = useState('Operator');
   const [contractAddress, setContractAddress] = useState(DEFAULT_CONTRACT_ADDRESS);
   const [toncenterApiKey, setToncenterApiKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [demo, setDemo] = useState<DemoState>(() => createDemoState());
 
   useEffect(() => {
     const user = WebApp.initDataUnsafe?.user?.first_name;
@@ -274,6 +427,10 @@ function App() {
   );
 
   const refreshSnapshot = useCallback(async () => {
+    if (mode !== 'live') {
+      return;
+    }
+
     const address = contractAddress.trim();
     if (address.length === 0) {
       setError('Contract address is empty.');
@@ -332,23 +489,243 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [callRpc, contractAddress]);
+  }, [callRpc, contractAddress, mode]);
 
   useEffect(() => {
+    if (mode !== 'live') {
+      return;
+    }
+
     void refreshSnapshot();
     const timer = window.setInterval(() => {
       void refreshSnapshot();
     }, 45000);
     return () => window.clearInterval(timer);
-  }, [refreshSnapshot]);
+  }, [mode, refreshSnapshot]);
+
+  const selectedDemoNft = useMemo(
+    () => demo.nfts.find((item) => item.id === demo.selectedNftId) ?? null,
+    [demo.nfts, demo.selectedNftId],
+  );
+
+  const demoPricedCollateralTon = useMemo(() => {
+    if (!selectedDemoNft) {
+      return 0;
+    }
+    return roundTon((selectedDemoNft.estimatedTon * (10_000 - demo.oracleHaircutBps)) / 10_000);
+  }, [demo.oracleHaircutBps, selectedDemoNft]);
+
+  const demoMaxBorrowTon = useMemo(
+    () => roundTon((demoPricedCollateralTon * demo.maxLtvBps) / 10_000),
+    [demo.maxLtvBps, demoPricedCollateralTon],
+  );
+
+  const demoSnapshot = useMemo(() => buildDemoSnapshot(demo), [demo]);
+  const activeSnapshot = mode === 'demo' ? demoSnapshot : snapshot;
+
+  const demoStatusNote = useMemo(() => {
+    if (mode !== 'demo') {
+      return '';
+    }
+
+    if (demo.status !== 0) {
+      return 'Current round is closed. Use NEW ROUND or RESET SANDBOX.';
+    }
+
+    if (demo.paused) {
+      return 'Borrow will fail: protocol pause flag is ON.';
+    }
+
+    if (!demo.oracleFresh) {
+      return 'Borrow will fail: oracle freshness check is OFF.';
+    }
+
+    if (demo.requestedPrincipalTon > demoMaxBorrowTon) {
+      return `Borrow will fail: request exceeds max LTV cap (${demoMaxBorrowTon.toFixed(3)} TON).`;
+    }
+
+    if (demo.requestedPrincipalTon > demo.treasuryTon) {
+      return 'Borrow will fail: treasury has insufficient balance.';
+    }
+
+    return 'Borrow should pass with current sandbox settings.';
+  }, [
+    demo.maxLtvBps,
+    demo.oracleFresh,
+    demo.paused,
+    demo.requestedPrincipalTon,
+    demo.status,
+    demo.treasuryTon,
+    demoMaxBorrowTon,
+    mode,
+  ]);
+
+  const onDemoFund = useCallback(() => {
+    setDemo((prev) => {
+      if (prev.status !== 0) {
+        return {
+          ...prev,
+          actionLog: appendLog(prev.actionLog, 'Funding blocked: round is not OPEN.'),
+        };
+      }
+
+      if (prev.paused) {
+        return {
+          ...prev,
+          actionLog: appendLog(prev.actionLog, 'Funding blocked: pause flag is active.'),
+        };
+      }
+
+      if (!prev.oracleFresh) {
+        return {
+          ...prev,
+          actionLog: appendLog(prev.actionLog, 'Funding blocked: oracle data is stale.'),
+        };
+      }
+
+      const nft = prev.nfts.find((item) => item.id === prev.selectedNftId);
+      if (!nft) {
+        return {
+          ...prev,
+          actionLog: appendLog(prev.actionLog, 'Funding blocked: no collateral NFT selected.'),
+        };
+      }
+
+      const principalTon = roundTon(clampNumber(prev.requestedPrincipalTon, 0, 999_999));
+      const termHours = clampNumber(prev.requestedTermHours, 1, 720);
+      const aprBps = clampNumber(prev.requestedAprBps, 100, 5000);
+      const collateralTon = roundTon((nft.estimatedTon * (10_000 - prev.oracleHaircutBps)) / 10_000);
+      const maxBorrowTon = roundTon((collateralTon * prev.maxLtvBps) / 10_000);
+
+      if (principalTon <= 0) {
+        return {
+          ...prev,
+          actionLog: appendLog(prev.actionLog, 'Funding blocked: principal must be positive.'),
+        };
+      }
+
+      if (principalTon > maxBorrowTon) {
+        return {
+          ...prev,
+          actionLog: appendLog(
+            prev.actionLog,
+            `Funding blocked: LTV breach (${principalTon.toFixed(3)} > ${maxBorrowTon.toFixed(3)} TON).`,
+          ),
+        };
+      }
+
+      if (principalTon > prev.treasuryTon) {
+        return {
+          ...prev,
+          actionLog: appendLog(prev.actionLog, 'Funding blocked: treasury liquidity is too low.'),
+        };
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      const termSeconds = Math.floor(termHours * 3600);
+      const interestTon = roundTon((principalTon * aprBps * termSeconds) / (10_000 * SECONDS_PER_YEAR));
+      const repayDueTon = roundTon(principalTon + interestTon);
+      const ltvBpsAtOpen = collateralTon > 0 ? Math.round((principalTon * 10_000) / collateralTon) : 0;
+
+      return {
+        ...prev,
+        requestedTermHours: termHours,
+        requestedAprBps: aprBps,
+        walletTon: roundTon(prev.walletTon + principalTon),
+        treasuryTon: roundTon(prev.treasuryTon - principalTon),
+        status: 1,
+        loan: {
+          nftId: nft.id,
+          principalTon,
+          repayDueTon,
+          startedAt: now,
+          dueAt: now + termSeconds,
+          ltvBpsAtOpen,
+        },
+        actionLog: appendLog(
+          prev.actionLog,
+          `Loan FUNDED +${principalTon.toFixed(3)} TON; repay ${repayDueTon.toFixed(3)} TON.`,
+        ),
+      };
+    });
+  }, []);
+
+  const onDemoRepay = useCallback(() => {
+    setDemo((prev) => {
+      if (prev.status !== 1 || !prev.loan) {
+        return {
+          ...prev,
+          actionLog: appendLog(prev.actionLog, 'Repay blocked: no active FUNDED loan.'),
+        };
+      }
+
+      const dueTon = prev.loan.repayDueTon;
+      if (prev.walletTon < dueTon) {
+        return {
+          ...prev,
+          actionLog: appendLog(
+            prev.actionLog,
+            `Repay blocked: wallet ${prev.walletTon.toFixed(3)} < due ${dueTon.toFixed(3)} TON.`,
+          ),
+        };
+      }
+
+      return {
+        ...prev,
+        walletTon: roundTon(prev.walletTon - dueTon),
+        treasuryTon: roundTon(prev.treasuryTon + dueTon),
+        status: 2,
+        actionLog: appendLog(prev.actionLog, `Loan REPAID ${dueTon.toFixed(3)} TON.`),
+      };
+    });
+  }, []);
+
+  const onDemoLiquidate = useCallback(() => {
+    setDemo((prev) => {
+      if (prev.status !== 1 || !prev.loan) {
+        return {
+          ...prev,
+          actionLog: appendLog(prev.actionLog, 'Liquidation blocked: no active FUNDED loan.'),
+        };
+      }
+
+      return {
+        ...prev,
+        status: 3,
+        actionLog: appendLog(prev.actionLog, `Loan LIQUIDATED on NFT ${prev.loan.nftId}.`),
+      };
+    });
+  }, []);
+
+  const onDemoNewRound = useCallback(() => {
+    setDemo((prev) => {
+      if (prev.status === 1) {
+        return {
+          ...prev,
+          actionLog: appendLog(prev.actionLog, 'Cannot open new round while loan is still FUNDED.'),
+        };
+      }
+
+      return {
+        ...prev,
+        status: 0,
+        loan: null,
+        actionLog: appendLog(prev.actionLog, 'Round reset to OPEN with current balances.'),
+      };
+    });
+  }, []);
+
+  const onDemoReset = useCallback(() => {
+    setDemo(createDemoState());
+  }, []);
 
   const termProgress = useMemo(() => {
-    if (!snapshot || snapshot.loan.status !== 1) {
+    if (!activeSnapshot || activeSnapshot.loan.status !== 1) {
       return 0;
     }
 
-    const started = snapshot.loan.startedAt;
-    const due = snapshot.loan.dueAt;
+    const started = activeSnapshot.loan.startedAt;
+    const due = activeSnapshot.loan.dueAt;
     if (started <= 0 || due <= started) {
       return 0;
     }
@@ -363,8 +740,8 @@ function App() {
       return 100;
     }
 
-    return Math.floor((elapsed * 10000) / duration) / 100;
-  }, [snapshot]);
+    return Math.floor((elapsed * 10_000) / duration) / 100;
+  }, [activeSnapshot]);
 
   return (
     <div className="app-shell">
@@ -373,84 +750,372 @@ function App() {
 
       <main className="surface">
         <section className="hero reveal">
-          <p className="eyebrow">TNFT FINANCE / TESTNET CONTROL</p>
+          <p className="eyebrow">TNFT FINANCE / CREDIT CONTROL</p>
           <h1>Eggshell Credit Console</h1>
           <p className="subtitle">
-            Strict operating surface for MVP lending flows. Bone palette, sharp typography, zero
-            noise.
+            {mode === 'demo'
+              ? 'Offline sandbox with fan tokens: test collateral, balances and credit decisions without testnet.'
+              : 'Strict read-only surface for testnet MVP lending flows.'}
           </p>
           <div className="hero-meta">
             <span>Operator: {userName}</span>
+            <span>Mode: {mode === 'demo' ? 'DEMO SANDBOX' : 'LIVE RPC'}</span>
             <span>Expected owner: {shortValue(EXPECTED_OWNER_ADDRESS, 12, 10)}</span>
           </div>
         </section>
 
-        <section className="controls reveal delay-1">
-          <label className="control-field">
-            <span>Contract</span>
-            <input
-              value={contractAddress}
-              onChange={(event) => setContractAddress(event.target.value)}
-              placeholder="EQ..."
-              autoComplete="off"
-            />
-          </label>
-
-          <label className="control-field">
-            <span>Toncenter API key (optional)</span>
-            <input
-              value={toncenterApiKey}
-              onChange={(event) => setToncenterApiKey(event.target.value)}
-              placeholder="for higher rate limits"
-              autoComplete="off"
-            />
-          </label>
-
-          <div className="control-actions">
-            <button className="btn btn-primary" onClick={() => void refreshSnapshot()} disabled={loading}>
-              {loading ? 'SYNCING...' : 'REFRESH'}
-            </button>
-            <a
-              className="btn btn-ghost"
-              href={`${TONSCAN_ADDRESS_PREFIX}${contractAddress.trim()}`}
-              target="_blank"
-              rel="noreferrer"
+        <section className="mode-bar reveal delay-1">
+          <div className="mode-pills">
+            <button
+              className={`mode-pill ${mode === 'demo' ? 'active' : ''}`}
+              onClick={() => {
+                setMode('demo');
+                setError('');
+                setLoading(false);
+              }}
             >
-              TONSCAN
-            </a>
+              DEMO SANDBOX
+            </button>
+            <button
+              className={`mode-pill ${mode === 'live' ? 'active' : ''}`}
+              onClick={() => setMode('live')}
+            >
+              LIVE RPC
+            </button>
           </div>
+          <p className="mode-note">
+            {mode === 'demo'
+              ? 'All actions are local and non-custodial mock flows.'
+              : 'Reads on-chain state from Toncenter (testnet).'}
+          </p>
         </section>
 
-        {error && (
+        <section className="controls reveal delay-1">
+          {mode === 'live' ? (
+            <>
+              <label className="control-field">
+                <span>Contract</span>
+                <input
+                  value={contractAddress}
+                  onChange={(event) => setContractAddress(event.target.value)}
+                  placeholder="EQ..."
+                  autoComplete="off"
+                />
+              </label>
+
+              <label className="control-field">
+                <span>Toncenter API key (optional)</span>
+                <input
+                  value={toncenterApiKey}
+                  onChange={(event) => setToncenterApiKey(event.target.value)}
+                  placeholder="for higher rate limits"
+                  autoComplete="off"
+                />
+              </label>
+
+              <div className="control-actions">
+                <button className="btn btn-primary" onClick={() => void refreshSnapshot()} disabled={loading}>
+                  {loading ? 'SYNCING...' : 'REFRESH'}
+                </button>
+                <a
+                  className="btn btn-ghost"
+                  href={`${TONSCAN_ADDRESS_PREFIX}${contractAddress.trim()}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  TONSCAN
+                </a>
+              </div>
+            </>
+          ) : (
+            <>
+              <label className="control-field">
+                <span>Test NFT</span>
+                <select
+                  value={demo.selectedNftId}
+                  onChange={(event) =>
+                    setDemo((prev) => ({
+                      ...prev,
+                      selectedNftId: event.target.value,
+                    }))
+                  }
+                >
+                  {demo.nfts.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} ({item.estimatedTon.toFixed(2)} TON)
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="control-field">
+                <span>Requested principal (TON)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={demo.requestedPrincipalTon}
+                  onChange={(event) =>
+                    setDemo((prev) => ({
+                      ...prev,
+                      requestedPrincipalTon: roundTon(clampNumber(Number.parseFloat(event.target.value), 0, 999_999)),
+                    }))
+                  }
+                />
+              </label>
+
+              <div className="control-actions">
+                <button className="btn btn-primary" onClick={onDemoFund}>
+                  TRY FUND
+                </button>
+                <button className="btn btn-ghost" onClick={onDemoRepay}>
+                  REPAY
+                </button>
+              </div>
+            </>
+          )}
+        </section>
+
+        {mode === 'live' && error && (
           <section className="alert reveal delay-2">
             <strong>RPC WARNING</strong>
             <span>{error}</span>
           </section>
         )}
 
+        {mode === 'demo' && (
+          <section className="sandbox-grid">
+            <article className="panel reveal delay-2">
+              <h2>Sandbox Assets</h2>
+              <dl>
+                <div>
+                  <dt>Wallet balance</dt>
+                  <dd>{demo.walletTon.toFixed(3)} TON</dd>
+                </div>
+                <div>
+                  <dt>Treasury balance</dt>
+                  <dd>{demo.treasuryTon.toFixed(3)} TON</dd>
+                </div>
+                <div>
+                  <dt>Collateral value</dt>
+                  <dd>{demoPricedCollateralTon.toFixed(3)} TON</dd>
+                </div>
+                <div>
+                  <dt>Max borrow now</dt>
+                  <dd>{demoMaxBorrowTon.toFixed(3)} TON</dd>
+                </div>
+              </dl>
+              <div className="asset-table">
+                {demo.nfts.map((item) => (
+                  <div key={item.id} className={`asset-row ${item.id === demo.selectedNftId ? 'active' : ''}`}>
+                    <strong>{item.name}</strong>
+                    <span>{item.collection}</span>
+                    <span>{item.estimatedTon.toFixed(2)} TON</span>
+                    <span>{shortValue(item.address, 10, 6)}</span>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="panel reveal delay-3">
+              <h2>Scenario Controls</h2>
+              <div className="sandbox-form">
+                <label className="control-field">
+                  <span>Term (hours)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={720}
+                    step={1}
+                    value={demo.requestedTermHours}
+                    onChange={(event) =>
+                      setDemo((prev) => ({
+                        ...prev,
+                        requestedTermHours: clampNumber(Number.parseFloat(event.target.value), 1, 720),
+                      }))
+                    }
+                  />
+                </label>
+
+                <label className="control-field">
+                  <span>APR (bps)</span>
+                  <input
+                    type="number"
+                    min={100}
+                    max={5000}
+                    step={25}
+                    value={demo.requestedAprBps}
+                    onChange={(event) =>
+                      setDemo((prev) => ({
+                        ...prev,
+                        requestedAprBps: clampNumber(Number.parseFloat(event.target.value), 100, 5000),
+                      }))
+                    }
+                  />
+                </label>
+
+                <label className="control-field">
+                  <span>Max LTV (bps)</span>
+                  <input
+                    type="number"
+                    min={1500}
+                    max={9000}
+                    step={25}
+                    value={demo.maxLtvBps}
+                    onChange={(event) =>
+                      setDemo((prev) => {
+                        const nextLtv = clampNumber(Number.parseFloat(event.target.value), 1500, 9000);
+                        return {
+                          ...prev,
+                          maxLtvBps: nextLtv,
+                          riskVersion: prev.riskVersion + (nextLtv === prev.maxLtvBps ? 0 : 1),
+                        };
+                      })
+                    }
+                  />
+                </label>
+
+                <label className="control-field">
+                  <span>Oracle haircut (bps)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={5000}
+                    step={25}
+                    value={demo.oracleHaircutBps}
+                    onChange={(event) =>
+                      setDemo((prev) => ({
+                        ...prev,
+                        oracleHaircutBps: clampNumber(Number.parseFloat(event.target.value), 0, 5000),
+                      }))
+                    }
+                  />
+                </label>
+
+                <label className="control-field">
+                  <span>Wallet TON</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={1000000}
+                    step={0.1}
+                    value={demo.walletTon}
+                    onChange={(event) =>
+                      setDemo((prev) => ({
+                        ...prev,
+                        walletTon: roundTon(clampNumber(Number.parseFloat(event.target.value), 0, 1_000_000)),
+                      }))
+                    }
+                  />
+                </label>
+
+                <label className="control-field">
+                  <span>Treasury TON</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={1000000}
+                    step={0.1}
+                    value={demo.treasuryTon}
+                    onChange={(event) =>
+                      setDemo((prev) => ({
+                        ...prev,
+                        treasuryTon: roundTon(clampNumber(Number.parseFloat(event.target.value), 0, 1_000_000)),
+                      }))
+                    }
+                  />
+                </label>
+
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={demo.oracleFresh}
+                    onChange={(event) =>
+                      setDemo((prev) => ({
+                        ...prev,
+                        oracleFresh: event.target.checked,
+                      }))
+                    }
+                  />
+                  <span>Oracle fresh</span>
+                </label>
+
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={demo.paused}
+                    onChange={(event) =>
+                      setDemo((prev) => ({
+                        ...prev,
+                        paused: event.target.checked,
+                      }))
+                    }
+                  />
+                  <span>Pause funding</span>
+                </label>
+              </div>
+
+              <div className="control-actions sandbox-actions">
+                <button className="btn btn-primary" onClick={onDemoFund}>
+                  TRY FUND
+                </button>
+                <button className="btn btn-ghost" onClick={onDemoRepay}>
+                  REPAY
+                </button>
+                <button className="btn btn-ghost" onClick={onDemoLiquidate}>
+                  FORCE LIQUIDATE
+                </button>
+                <button className="btn btn-ghost" onClick={onDemoNewRound}>
+                  NEW ROUND
+                </button>
+                <button className="btn btn-ghost" onClick={onDemoReset}>
+                  RESET SANDBOX
+                </button>
+              </div>
+            </article>
+
+            <article className="panel reveal delay-4 panel-log">
+              <h2>Decision Log</h2>
+              <p className="sandbox-note">{demoStatusNote}</p>
+              <ul>
+                {demo.actionLog.map((entry) => (
+                  <li key={entry}>{entry}</li>
+                ))}
+              </ul>
+            </article>
+          </section>
+        )}
+
         <section className="metric-grid">
           <article className="metric-card reveal delay-2">
             <p>Account state</p>
-            <h3>{snapshot?.accountState?.toUpperCase() ?? '—'}</h3>
-            <small>Last refresh: {snapshot ? new Date(snapshot.fetchedAt).toLocaleTimeString() : '—'}</small>
+            <h3>{activeSnapshot?.accountState?.toUpperCase() ?? '—'}</h3>
+            <small>
+              Last refresh:{' '}
+              {activeSnapshot
+                ? new Date(activeSnapshot.fetchedAt).toLocaleTimeString('ru-RU', { hour12: false })
+                : '—'}
+            </small>
           </article>
 
           <article className="metric-card reveal delay-3">
             <p>Loan status</p>
-            <h3>{snapshot ? getStatusLabel(snapshot.loan.status) : '—'}</h3>
-            <small>Health: {getHealthLabel(snapshot)}</small>
+            <h3>{activeSnapshot ? getStatusLabel(activeSnapshot.loan.status) : '—'}</h3>
+            <small>Health: {getHealthLabel(activeSnapshot)}</small>
           </article>
 
           <article className="metric-card reveal delay-4">
-            <p>TVM balance</p>
-            <h3>{snapshot ? `${formatTonFromNano(snapshot.balanceNano)} TON` : '—'}</h3>
-            <small>LT: {snapshot?.lastTxLt ?? '—'}</small>
+            <p>{mode === 'demo' ? 'Vault balance' : 'TVM balance'}</p>
+            <h3>{activeSnapshot ? `${formatTonFromNano(activeSnapshot.balanceNano)} TON` : '—'}</h3>
+            <small>
+              {mode === 'demo' ? `Wallet: ${demo.walletTon.toFixed(3)} TON` : `LT: ${activeSnapshot?.lastTxLt ?? '—'}`}
+            </small>
           </article>
 
           <article className="metric-card reveal delay-5">
             <p>Risk version</p>
-            <h3>{snapshot ? snapshot.risk.riskVersion.toString() : '—'}</h3>
-            <small>{getRiskWindow(snapshot)}</small>
+            <h3>{activeSnapshot ? activeSnapshot.risk.riskVersion.toString() : '—'}</h3>
+            <small>{getRiskWindow(activeSnapshot)}</small>
           </article>
         </section>
 
@@ -460,36 +1125,52 @@ function App() {
             <dl>
               <div>
                 <dt>Paused</dt>
-                <dd>{snapshot?.loan.paused ? 'YES' : 'NO'}</dd>
+                <dd>{activeSnapshot?.loan.paused ? 'YES' : 'NO'}</dd>
               </div>
               <div>
                 <dt>Oracle fresh</dt>
-                <dd>{snapshot?.loan.oracleFresh ? 'YES' : 'NO'}</dd>
+                <dd>{activeSnapshot?.loan.oracleFresh ? 'YES' : 'NO'}</dd>
               </div>
               <div>
                 <dt>Oracle price</dt>
-                <dd>{snapshot ? `${formatTonFromNano(snapshot.loan.oraclePrice)} TON` : '—'}</dd>
+                <dd>{activeSnapshot ? `${formatTonFromNano(activeSnapshot.loan.oraclePrice)} TON` : '—'}</dd>
               </div>
               <div>
                 <dt>Oracle updated</dt>
-                <dd>{snapshot ? formatTimestamp(snapshot.loan.oracleUpdatedAt) : '—'}</dd>
+                <dd>{activeSnapshot ? formatTimestamp(activeSnapshot.loan.oracleUpdatedAt) : '—'}</dd>
               </div>
               <div>
                 <dt>Started at</dt>
-                <dd>{snapshot ? formatTimestamp(snapshot.loan.startedAt) : '—'}</dd>
+                <dd>{activeSnapshot ? formatTimestamp(activeSnapshot.loan.startedAt) : '—'}</dd>
               </div>
               <div>
                 <dt>Due at</dt>
-                <dd>{snapshot ? formatTimestamp(snapshot.loan.dueAt) : '—'}</dd>
+                <dd>{activeSnapshot ? formatTimestamp(activeSnapshot.loan.dueAt) : '—'}</dd>
               </div>
               <div>
                 <dt>Lender cell</dt>
-                <dd>{snapshot ? shortValue(snapshot.loan.lenderCell, 14, 10) : '—'}</dd>
+                <dd>{activeSnapshot ? shortValue(activeSnapshot.loan.lenderCell, 14, 10) : '—'}</dd>
               </div>
               <div>
                 <dt>Owner cell</dt>
-                <dd>{snapshot ? shortValue(snapshot.ownerCell, 14, 10) : '—'}</dd>
+                <dd>{activeSnapshot ? shortValue(activeSnapshot.ownerCell, 14, 10) : '—'}</dd>
               </div>
+              {mode === 'demo' && demo.loan && (
+                <>
+                  <div>
+                    <dt>Principal</dt>
+                    <dd>{demo.loan.principalTon.toFixed(3)} TON</dd>
+                  </div>
+                  <div>
+                    <dt>Repay due</dt>
+                    <dd>{demo.loan.repayDueTon.toFixed(3)} TON</dd>
+                  </div>
+                  <div>
+                    <dt>LTV at open</dt>
+                    <dd>{(demo.loan.ltvBpsAtOpen / 100).toFixed(2)}%</dd>
+                  </div>
+                </>
+              )}
             </dl>
           </article>
 
@@ -498,38 +1179,42 @@ function App() {
             <dl>
               <div>
                 <dt>Max LTV</dt>
-                <dd>{snapshot ? `${(Number(snapshot.risk.maxLtvBps) / 100).toFixed(2)}%` : '—'}</dd>
+                <dd>{activeSnapshot ? `${(Number(activeSnapshot.risk.maxLtvBps) / 100).toFixed(2)}%` : '—'}</dd>
               </div>
               <div>
                 <dt>Oracle max age</dt>
-                <dd>{snapshot ? formatSeconds(snapshot.risk.oracleMaxAge) : '—'}</dd>
+                <dd>{activeSnapshot ? formatSeconds(activeSnapshot.risk.oracleMaxAge) : '—'}</dd>
               </div>
               <div>
                 <dt>Risk timelock</dt>
-                <dd>{snapshot ? formatSeconds(snapshot.risk.riskTimelock) : '—'}</dd>
+                <dd>{activeSnapshot ? formatSeconds(activeSnapshot.risk.riskTimelock) : '—'}</dd>
               </div>
               <div>
                 <dt>Pending max LTV</dt>
-                <dd>{snapshot ? `${(Number(snapshot.risk.pendingMaxLtvBps) / 100).toFixed(2)}%` : '—'}</dd>
+                <dd>{activeSnapshot ? `${(Number(activeSnapshot.risk.pendingMaxLtvBps) / 100).toFixed(2)}%` : '—'}</dd>
               </div>
               <div>
                 <dt>Pending oracle age</dt>
-                <dd>{snapshot ? formatSeconds(snapshot.risk.pendingOracleMaxAge) : '—'}</dd>
+                <dd>{activeSnapshot ? formatSeconds(activeSnapshot.risk.pendingOracleMaxAge) : '—'}</dd>
               </div>
               <div>
                 <dt>Pending ETA</dt>
-                <dd>{snapshot ? formatTimestamp(snapshot.risk.pendingEta) : '—'}</dd>
+                <dd>{activeSnapshot ? formatTimestamp(activeSnapshot.risk.pendingEta) : '—'}</dd>
               </div>
               <div>
                 <dt>Last tx hash</dt>
-                <dd>{snapshot ? shortValue(snapshot.lastTxHash, 12, 10) : '—'}</dd>
+                <dd>{activeSnapshot ? shortValue(activeSnapshot.lastTxHash, 12, 10) : '—'}</dd>
               </div>
               <div>
                 <dt>Explorer</dt>
                 <dd>
-                  <a href={`${TONSCAN_ADDRESS_PREFIX}${contractAddress.trim()}`} target="_blank" rel="noreferrer">
-                    open contract
-                  </a>
+                  {mode === 'live' ? (
+                    <a href={`${TONSCAN_ADDRESS_PREFIX}${contractAddress.trim()}`} target="_blank" rel="noreferrer">
+                      open contract
+                    </a>
+                  ) : (
+                    'offline sandbox'
+                  )}
                 </dd>
               </div>
             </dl>
@@ -545,8 +1230,9 @@ function App() {
             <div className="fill" style={{ width: `${termProgress}%` }} />
           </div>
           <p>
-            Status follows strict lifecycle gates. Funding is blocked if oracle is stale; risk
-            updates are timelocked by design.
+            {mode === 'demo'
+              ? 'Use this offline harness to validate credit gates: stale oracle, pause, LTV and liquidity checks.'
+              : 'Status follows strict lifecycle gates. Funding is blocked if oracle is stale; risk updates are timelocked by design.'}
           </p>
         </section>
       </main>
