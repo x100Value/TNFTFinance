@@ -12,16 +12,17 @@ $patterns = @(
 
 $exclude = @("node_modules", "build", "dist", ".git")
 $regex = ($patterns -join "|")
+$sep = '[\\/]'
 
 $files = Get-ChildItem -Path $root -Recurse -File |
   Where-Object {
     $p = $_.FullName.ToLower()
-    if ($p -match "\\docs\\") { return $false }
+    if ($p -match "$sep" + "docs" + "$sep") { return $false }
     if ($p -like "*.md" -or $p -like "*.txt") { return $false }
     if ($p -match "\\.env\\.example$") { return $false }
-    if ($p -match "\\scripts\\scan-secrets.ps1$") { return $false }
+    if ($p -match "$sep" + "scripts" + "$sep" + "scan-secrets\.ps1$") { return $false }
     if ($p -match "\\.gitignore$") { return $false }
-    -not ($exclude | ForEach-Object { $p -match "\\\\$_\\\\" } | Where-Object { $_ })
+    -not ($exclude | ForEach-Object { $p -match "$sep" + [regex]::Escape($_) + "$sep" } | Where-Object { $_ })
   }
 
 $hits = @()

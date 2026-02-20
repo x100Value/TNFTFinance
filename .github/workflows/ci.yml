@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Secret scan
+        shell: pwsh
+        run: ./scripts/scan-secrets.ps1
+
+  tnftfinance-blueprint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: prototypes/tnftfinance-blueprint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Compile contracts
+        run: npm run compile
+
+      - name: Run tests
+        run: npm test
+
+  tnft-contracts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: prototypes/tnft-contracts
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: prototypes/tnft-contracts/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile Tact contracts
+        run: npx tact -c tact.config.json
+
+  tnfi-mini-app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: prototypes/tnfi-mini-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build mini app
+        run: npm run build
+
+      - name: Run tests
+        env:
+          CI: true
+        run: npm test -- --watch=false

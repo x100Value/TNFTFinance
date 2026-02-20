@@ -4,7 +4,7 @@
     {
       "name": "NFTCollateralLoan",
       "path": "contracts/n_f_t_collateral_loan.tact",
-      "output": "build\\NFTCollateralLoan",
+      "output": "build/NFTCollateralLoan",
       "options": {
         "debug": false,
         "external": false
