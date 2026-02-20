@@ -26,9 +26,23 @@ function envAddress(name: string, fallback: Address): Address {
 }
 
 export async function run(provider: NetworkProvider) {
-    const senderAddress = provider.sender().address;
+    const ownerFromEnv = process.env.MVP_OWNER_ADDRESS?.trim();
+    const ownerFromEnvAddress = ownerFromEnv ? Address.parse(ownerFromEnv) : null;
+    const senderAddress = provider.sender().address ?? ownerFromEnvAddress;
     if (!senderAddress) {
-        throw new Error('Sender address is required for deploy');
+        throw new Error('Sender address is required for deploy. Set MVP_OWNER_ADDRESS for deeplink flow.');
+    }
+    const allowOwnerMismatch = process.env.MVP_ALLOW_OWNER_MISMATCH === 'true';
+    if (
+        provider.sender().address &&
+        ownerFromEnvAddress &&
+        senderAddress.toRawString() !== ownerFromEnvAddress.toRawString() &&
+        !allowOwnerMismatch
+    ) {
+        throw new Error(
+            `Sender wallet ${senderAddress.toString()} does not match MVP_OWNER_ADDRESS ${ownerFromEnvAddress.toString()}. ` +
+                'Refusing deploy to avoid accidental extra deployment. Set MVP_ALLOW_OWNER_MISMATCH=true to override.',
+        );
     }
 
     const borrower = envAddress('MVP_BORROWER_ADDRESS', senderAddress);

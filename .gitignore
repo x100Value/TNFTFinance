@@ -12,6 +12,7 @@ build/
 dist/
 coverage/
 docs/deployments/testnet-run-*.log
+docs/qr/
 *.boc
 *.fif
 *.pkg
