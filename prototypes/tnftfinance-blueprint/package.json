@@ -5,9 +5,10 @@
   "main": "index.js",
   "scripts": {
     "build": "npx tact -c tact.config.json",
-    "test": "npm run test:artifacts && npm run test:safety",
+    "test": "npm run test:artifacts && npm run test:safety && npm run test:prealpha-modular-smoke",
     "test:artifacts": "node tests/simple-test.js",
     "test:safety": "node -r ts-node/register tests/mvp-safety-check.ts",
+    "test:prealpha-modular-smoke": "node -r ts-node/register tests/prealpha-modular-0.0.1.7-smoke.ts",
     "compile": "npx tact -c tact.config.json",
     "deploy:testnet": "npm exec -- blueprint run deployNFTCollateralLoan --testnet --mnemonic"
   },

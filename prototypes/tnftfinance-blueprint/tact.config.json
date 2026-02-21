@@ -10,6 +10,66 @@
         "external": false
       },
       "mode": "full"
+    },
+    {
+      "name": "TNFTOracleQuorum",
+      "path": "contracts/TNFTOracleQuorum.tact",
+      "output": "build/TNFTOracleQuorum",
+      "options": {
+        "debug": false,
+        "external": false
+      },
+      "mode": "full"
+    },
+    {
+      "name": "TNFTLiquidityPool",
+      "path": "contracts/TNFTLiquidityPool.tact",
+      "output": "build/TNFTLiquidityPool",
+      "options": {
+        "debug": false,
+        "external": false
+      },
+      "mode": "full"
+    },
+    {
+      "name": "TNFTReserveBackstopVault",
+      "path": "contracts/TNFTReserveBackstopVault.tact",
+      "output": "build/TNFTReserveBackstopVault",
+      "options": {
+        "debug": false,
+        "external": false
+      },
+      "mode": "full"
+    },
+    {
+      "name": "TNFTLiquidationAuction",
+      "path": "contracts/TNFTLiquidationAuction.tact",
+      "output": "build/TNFTLiquidationAuction",
+      "options": {
+        "debug": false,
+        "external": false
+      },
+      "mode": "full"
+    },
+    {
+      "name": "TNFTCollateralEscrow",
+      "path": "contracts/TNFTCollateralEscrow.tact",
+      "output": "build/TNFTCollateralEscrow",
+      "options": {
+        "debug": false,
+        "external": false
+      },
+      "mode": "full"
+    },
+    {
+      "name": "TNFTRiskMultisig",
+      "path": "contracts/TNFTRiskMultisig.tact",
+      "output": "build/TNFTRiskMultisig",
+      "options": {
+        "debug": false,
+        "external": false
+      },
+      "mode": "full"
     }
   ]
 }
