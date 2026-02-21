@@ -1,17 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import WebApp from '@twa-dev/sdk';
 import { TonConnectButton, useTonAddress, useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
-import { beginCell } from '@ton/core';
 import './App.css';
 
 const TONCENTER_JSON_RPC = 'https://testnet.toncenter.com/api/v2/jsonRPC';
 const TONSCAN_ADDRESS_PREFIX = 'https://testnet.tonscan.org/address/';
 const SECONDS_PER_YEAR = 365 * 24 * 60 * 60;
-const OPCODE_FUND_LOAN = 811602512;
-const OPCODE_REPAY = 652692312;
-const OPCODE_CANCEL_LOAN = 2871608707;
-const OPCODE_DEPOSIT_LIQUIDITY = 3267652367;
-const OPCODE_WITHDRAW_LIQUIDITY = 1901422160;
+
+const PAYLOAD_FUND_LOAN = 'te6cckEBAQEABgAACDBgElAkxWpe';
+const PAYLOAD_REPAY = 'te6cckEBAQEABgAACCbnS1jEQSFI';
+const PAYLOAD_CANCEL_LOAN = 'te6cckEBAQEABgAACKspRYMEl4FR';
+const PAYLOAD_WITHDRAW_LIQUIDITY = 'te6cckEBAQEABgAACHFVZlDaNSNz';
+const PAYLOAD_DEPOSIT_BY_TIER: Record<string, string> = {
+  '0': 'te6cckEBAQEAJwAAScLEaw8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAECS2ssR',
+  '1': 'te6cckEBAQEAJwAAScLEaw8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDq4T2T',
+  '2': 'te6cckEBAQEAJwAAScLEaw8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUDlQmkC',
+  '3': 'te6cckEBAQEAJwAAScLEaw8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAcCdeZ+A',
+  '4': 'te6cckEBAQEAJwAAScLEaw8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAkB86o42',
+};
 
 const DEFAULT_CONTRACT_ADDRESS = 'EQDNj4-A8lILD6G3YXvEQWbMreziRuCGkbu2Tbb6xuPJjQUE';
 const EXPECTED_OWNER_ADDRESS = 'UQCQ4dGD-gm1VS7UkPZtvPZwmXzAUzokZ1HS551IcwQ_KYXA';
@@ -370,19 +376,6 @@ function parseTonToNanoSafe(value: string): bigint {
   return nano;
 }
 
-function buildSingleOpcodePayload(opcode: number): string {
-  return beginCell().storeUint(opcode, 32).endCell().toBoc().toString('base64');
-}
-
-function buildDepositLiquidityPayload(tier: number): string {
-  return beginCell()
-    .storeUint(OPCODE_DEPOSIT_LIQUIDITY, 32)
-    .storeInt(BigInt(clampNumber(tier, 0, 4)), 257)
-    .endCell()
-    .toBoc()
-    .toString('base64');
-}
-
 function appendLog(entries: string[], message: string): string[] {
   const stamp = new Date().toLocaleTimeString('ru-RU', { hour12: false });
   return [`${stamp} ${message}`, ...entries].slice(0, 12);
@@ -679,7 +672,7 @@ function App() {
     await sendTonTransaction({
       to: contractAddress,
       amountTon: liveFundTon,
-      payload: buildSingleOpcodePayload(OPCODE_FUND_LOAN),
+      payload: PAYLOAD_FUND_LOAN,
       label: 'FundLoan',
     });
   }, [contractAddress, liveFundTon, sendTonTransaction]);
@@ -688,7 +681,7 @@ function App() {
     await sendTonTransaction({
       to: contractAddress,
       amountTon: liveRepayTon,
-      payload: buildSingleOpcodePayload(OPCODE_REPAY),
+      payload: PAYLOAD_REPAY,
       label: 'Repay',
     });
   }, [contractAddress, liveRepayTon, sendTonTransaction]);
@@ -697,16 +690,17 @@ function App() {
     await sendTonTransaction({
       to: contractAddress,
       amountTon: '0.05',
-      payload: buildSingleOpcodePayload(OPCODE_CANCEL_LOAN),
+      payload: PAYLOAD_CANCEL_LOAN,
       label: 'CancelLoan',
     });
   }, [contractAddress, sendTonTransaction]);
 
   const onLivePoolDeposit = useCallback(async () => {
+    const tierKey = String(clampNumber(Number.parseInt(poolTier, 10), 0, 4));
     await sendTonTransaction({
       to: poolAddress,
       amountTon: poolDepositTon,
-      payload: buildDepositLiquidityPayload(Number.parseInt(poolTier, 10)),
+      payload: PAYLOAD_DEPOSIT_BY_TIER[tierKey] ?? PAYLOAD_DEPOSIT_BY_TIER['0'],
       label: 'DepositLiquidity',
     });
   }, [poolAddress, poolDepositTon, poolTier, sendTonTransaction]);
@@ -715,7 +709,7 @@ function App() {
     await sendTonTransaction({
       to: poolAddress,
       amountTon: '0.05',
-      payload: buildSingleOpcodePayload(OPCODE_WITHDRAW_LIQUIDITY),
+      payload: PAYLOAD_WITHDRAW_LIQUIDITY,
       label: 'WithdrawLiquidity',
     });
   }, [poolAddress, sendTonTransaction]);
