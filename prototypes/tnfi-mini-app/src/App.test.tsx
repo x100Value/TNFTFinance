@@ -16,6 +16,13 @@ jest.mock('@twa-dev/sdk', () => ({
   },
 }));
 
+jest.mock('@tonconnect/ui-react', () => ({
+  __esModule: true,
+  TonConnectButton: () => <button type="button">Connect Wallet</button>,
+  useTonWallet: () => null,
+  useTonAddress: () => '',
+}));
+
 type MockPayload = {
   ok: boolean;
   result?: any;

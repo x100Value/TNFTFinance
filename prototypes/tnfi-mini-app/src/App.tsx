@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import WebApp from '@twa-dev/sdk';
+import { TonConnectButton, useTonAddress, useTonWallet } from '@tonconnect/ui-react';
 import './App.css';
 
 const TONCENTER_JSON_RPC = 'https://testnet.toncenter.com/api/v2/jsonRPC';
@@ -430,6 +431,8 @@ function App() {
   const [error, setError] = useState('');
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [demo, setDemo] = useState<DemoState>(() => createDemoState());
+  const connectedWallet = useTonWallet();
+  const connectedAddress = useTonAddress();
 
   useEffect(() => {
     const user = WebApp.initDataUnsafe?.user?.first_name;
@@ -978,6 +981,15 @@ function App() {
                 <span key={item}>{item}</span>
               ))}
             </div>
+          </div>
+          <div className="wallet-cta">
+            <div className="wallet-cta-main">
+              <TonConnectButton />
+              <span className={`wallet-chip ${connectedWallet ? 'connected' : 'disconnected'}`}>
+                {connectedWallet ? `Wallet: ${shortValue(connectedAddress, 8, 8)}` : 'Wallet: not connected'}
+              </span>
+            </div>
+            <small>Connect wallet for live transaction flow (coming in next contract integration step).</small>
           </div>
           <div className="hero-meta">
             <span>Operator: {userName}</span>

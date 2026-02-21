@@ -320,6 +320,55 @@
   color: rgba(240, 229, 209, 0.92);
 }
 
+.wallet-cta {
+  margin: 0 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-card-soft);
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.wallet-cta-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.wallet-cta button {
+  min-height: 38px;
+}
+
+.wallet-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  border-radius: 999px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wallet-chip.connected {
+  border-color: rgba(76, 168, 137, 0.42);
+  background: rgba(76, 168, 137, 0.1);
+}
+
+.wallet-chip.disconnected {
+  border-color: rgba(177, 127, 83, 0.42);
+  background: rgba(177, 127, 83, 0.12);
+}
+
+.wallet-cta small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .mode-bar {
   margin-top: 14px;
   border-radius: 14px;
@@ -1150,6 +1199,16 @@
 
   .mode-note {
     width: 100%;
+  }
+
+  .wallet-cta-main {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .wallet-chip {
+    width: 100%;
+    justify-content: center;
   }
 
   .controls,
