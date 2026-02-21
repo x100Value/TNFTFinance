@@ -1,11 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import WebApp from '@twa-dev/sdk';
-import { TonConnectButton, useTonAddress, useTonWallet } from '@tonconnect/ui-react';
+import { TonConnectButton, useTonAddress, useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
+import { beginCell } from '@ton/core';
 import './App.css';
 
 const TONCENTER_JSON_RPC = 'https://testnet.toncenter.com/api/v2/jsonRPC';
 const TONSCAN_ADDRESS_PREFIX = 'https://testnet.tonscan.org/address/';
 const SECONDS_PER_YEAR = 365 * 24 * 60 * 60;
+const OPCODE_FUND_LOAN = 811602512;
+const OPCODE_REPAY = 652692312;
+const OPCODE_CANCEL_LOAN = 2871608707;
+const OPCODE_DEPOSIT_LIQUIDITY = 3267652367;
+const OPCODE_WITHDRAW_LIQUIDITY = 1901422160;
 
 const DEFAULT_CONTRACT_ADDRESS = 'EQDNj4-A8lILD6G3YXvEQWbMreziRuCGkbu2Tbb6xuPJjQUE';
 const EXPECTED_OWNER_ADDRESS = 'UQCQ4dGD-gm1VS7UkPZtvPZwmXzAUzokZ1HS551IcwQ_KYXA';
@@ -348,6 +354,35 @@ function toNano(valueTon: number): number {
   return Math.round(clampNumber(valueTon, 0, 1_000_000) * 1_000_000_000);
 }
 
+function parseTonToNanoSafe(value: string): bigint {
+  const NANO_FACTOR = BigInt('1000000000');
+  const normalized = value.trim().replace(',', '.');
+  if (!/^\d+(\.\d{1,9})?$/.test(normalized)) {
+    throw new Error('TON amount format is invalid');
+  }
+  const [wholePart, fracPart = ''] = normalized.split('.');
+  const whole = BigInt(wholePart);
+  const frac = BigInt((fracPart + '000000000').slice(0, 9));
+  const nano = whole * NANO_FACTOR + frac;
+  if (nano <= BigInt(0)) {
+    throw new Error('TON amount must be greater than zero');
+  }
+  return nano;
+}
+
+function buildSingleOpcodePayload(opcode: number): string {
+  return beginCell().storeUint(opcode, 32).endCell().toBoc().toString('base64');
+}
+
+function buildDepositLiquidityPayload(tier: number): string {
+  return beginCell()
+    .storeUint(OPCODE_DEPOSIT_LIQUIDITY, 32)
+    .storeInt(BigInt(clampNumber(tier, 0, 4)), 257)
+    .endCell()
+    .toBoc()
+    .toString('base64');
+}
+
 function appendLog(entries: string[], message: string): string[] {
   const stamp = new Date().toLocaleTimeString('ru-RU', { hour12: false });
   return [`${stamp} ${message}`, ...entries].slice(0, 12);
@@ -431,8 +466,16 @@ function App() {
   const [error, setError] = useState('');
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [demo, setDemo] = useState<DemoState>(() => createDemoState());
+  const [tonConnectUI] = useTonConnectUI();
   const connectedWallet = useTonWallet();
   const connectedAddress = useTonAddress();
+  const [txBusy, setTxBusy] = useState(false);
+  const [txNote, setTxNote] = useState('');
+  const [liveFundTon, setLiveFundTon] = useState('1.000');
+  const [liveRepayTon, setLiveRepayTon] = useState('1.000');
+  const [poolAddress, setPoolAddress] = useState('');
+  const [poolDepositTon, setPoolDepositTon] = useState('1.000');
+  const [poolTier, setPoolTier] = useState('0');
 
   useEffect(() => {
     const user = WebApp.initDataUnsafe?.user?.first_name;
@@ -582,6 +625,100 @@ function App() {
     }, 45000);
     return () => window.clearInterval(timer);
   }, [mode, refreshSnapshot]);
+
+  const sendTonTransaction = useCallback(
+    async (params: { to: string; amountTon: string; payload: string; label: string }) => {
+      const to = params.to.trim();
+      if (!connectedWallet || connectedAddress.trim().length === 0) {
+        setError('Connect wallet first.');
+        return;
+      }
+      if (to.length === 0) {
+        setError('Target contract address is empty.');
+        return;
+      }
+
+      let amountNano: bigint;
+      try {
+        amountNano = parseTonToNanoSafe(params.amountTon);
+      } catch (amountError) {
+        const message = amountError instanceof Error ? amountError.message : 'Invalid TON amount';
+        setError(message);
+        return;
+      }
+
+      setError('');
+      setTxBusy(true);
+      setTxNote(`Signing: ${params.label}...`);
+      try {
+        await tonConnectUI.sendTransaction({
+          validUntil: Math.floor(Date.now() / 1000) + 600,
+          messages: [
+            {
+              address: to,
+              amount: amountNano.toString(),
+              payload: params.payload,
+            },
+          ],
+        });
+        setTxNote(`${params.label} sent. Check wallet and explorer.`);
+        if (mode === 'live') {
+          void refreshSnapshot();
+        }
+      } catch (txError) {
+        const message = txError instanceof Error ? txError.message : 'Transaction rejected';
+        setError(`Tx failed: ${message}`);
+      } finally {
+        setTxBusy(false);
+      }
+    },
+    [connectedAddress, connectedWallet, mode, refreshSnapshot, tonConnectUI],
+  );
+
+  const onLiveFundLoan = useCallback(async () => {
+    await sendTonTransaction({
+      to: contractAddress,
+      amountTon: liveFundTon,
+      payload: buildSingleOpcodePayload(OPCODE_FUND_LOAN),
+      label: 'FundLoan',
+    });
+  }, [contractAddress, liveFundTon, sendTonTransaction]);
+
+  const onLiveRepay = useCallback(async () => {
+    await sendTonTransaction({
+      to: contractAddress,
+      amountTon: liveRepayTon,
+      payload: buildSingleOpcodePayload(OPCODE_REPAY),
+      label: 'Repay',
+    });
+  }, [contractAddress, liveRepayTon, sendTonTransaction]);
+
+  const onLiveCancelLoan = useCallback(async () => {
+    await sendTonTransaction({
+      to: contractAddress,
+      amountTon: '0.05',
+      payload: buildSingleOpcodePayload(OPCODE_CANCEL_LOAN),
+      label: 'CancelLoan',
+    });
+  }, [contractAddress, sendTonTransaction]);
+
+  const onLivePoolDeposit = useCallback(async () => {
+    await sendTonTransaction({
+      to: poolAddress,
+      amountTon: poolDepositTon,
+      payload: buildDepositLiquidityPayload(Number.parseInt(poolTier, 10)),
+      label: 'DepositLiquidity',
+    });
+  }, [poolAddress, poolDepositTon, poolTier, sendTonTransaction]);
+
+  const onLivePoolWithdraw = useCallback(async () => {
+    await sendTonTransaction({
+      to: poolAddress,
+      amountTon: '0.05',
+      payload: buildSingleOpcodePayload(OPCODE_WITHDRAW_LIQUIDITY),
+      label: 'WithdrawLiquidity',
+    });
+  }, [poolAddress, sendTonTransaction]);
 
   const selectedDemoNft = useMemo(
     () => demo.nfts.find((item) => item.id === demo.selectedNftId) ?? null,
@@ -989,7 +1126,7 @@ function App() {
                 {connectedWallet ? `Wallet: ${shortValue(connectedAddress, 8, 8)}` : 'Wallet: not connected'}
               </span>
             </div>
-            <small>Connect wallet for live transaction flow (coming in next contract integration step).</small>
+            <small>{txNote || 'Connect wallet and use live actions below to sign testnet transactions.'}</small>
           </div>
           <div className="hero-meta">
             <span>Operator: {userName}</span>
@@ -1128,6 +1265,26 @@ function App() {
                       />
                     </label>
 
+                    <label className="control-field">
+                      <span>Fund amount (TON)</span>
+                      <input
+                        value={liveFundTon}
+                        onChange={(event) => setLiveFundTon(event.target.value)}
+                        placeholder="e.g. 1.000"
+                        autoComplete="off"
+                      />
+                    </label>
+
+                    <label className="control-field">
+                      <span>Repay amount (TON)</span>
+                      <input
+                        value={liveRepayTon}
+                        onChange={(event) => setLiveRepayTon(event.target.value)}
+                        placeholder="e.g. 1.050"
+                        autoComplete="off"
+                      />
+                    </label>
+
                     <div className="control-actions">
                       <button className="btn btn-primary" onClick={() => void refreshSnapshot()} disabled={loading}>
                         {loading ? 'SYNCING...' : 'REFRESH'}
@@ -1140,7 +1297,17 @@ function App() {
                       >
                         TONSCAN
                       </a>
+                      <button className="btn btn-primary" onClick={() => void onLiveFundLoan()} disabled={txBusy || loading}>
+                        {txBusy ? 'SIGNING...' : 'FUND LOAN'}
+                      </button>
+                      <button className="btn btn-ghost" onClick={() => void onLiveRepay()} disabled={txBusy || loading}>
+                        REPAY
+                      </button>
+                      <button className="btn btn-ghost" onClick={() => void onLiveCancelLoan()} disabled={txBusy || loading}>
+                        CANCEL
+                      </button>
                     </div>
+                    <p className="control-hint">Borrow flow in this MVP: borrower receives funds when lender signs FUND LOAN.</p>
                   </>
                 ) : (
                   <>
@@ -1212,12 +1379,57 @@ function App() {
                   </article>
                 ))}
               </div>
-              <div className="liquidity-actions">
-                <p>Поддерживаю протокол, управляю TVL и выпускаю кредиты заемщикам.</p>
-                <button className="btn btn-primary" onClick={onDemoFund}>
-                  Пополнить пул
-                </button>
-              </div>
+              {mode === 'live' ? (
+                <section className="controls">
+                  <label className="control-field">
+                    <span>Pool contract</span>
+                    <input
+                      value={poolAddress}
+                      onChange={(event) => setPoolAddress(event.target.value)}
+                      placeholder="EQ..."
+                      autoComplete="off"
+                    />
+                  </label>
+
+                  <label className="control-field">
+                    <span>Deposit amount (TON)</span>
+                    <input
+                      value={poolDepositTon}
+                      onChange={(event) => setPoolDepositTon(event.target.value)}
+                      placeholder="e.g. 1.000"
+                      autoComplete="off"
+                    />
+                  </label>
+
+                  <label className="control-field">
+                    <span>Tier (0-4)</span>
+                    <select value={poolTier} onChange={(event) => setPoolTier(event.target.value)}>
+                      <option value="0">0: no-lock</option>
+                      <option value="1">1: 1 month</option>
+                      <option value="2">2: 3 months</option>
+                      <option value="3">3: 6 months</option>
+                      <option value="4">4: 12 months</option>
+                    </select>
+                  </label>
+
+                  <div className="control-actions">
+                    <button className="btn btn-primary" onClick={() => void onLivePoolDeposit()} disabled={txBusy}>
+                      {txBusy ? 'SIGNING...' : 'DEPOSIT LP'}
+                    </button>
+                    <button className="btn btn-ghost" onClick={() => void onLivePoolWithdraw()} disabled={txBusy}>
+                      WITHDRAW LP
+                    </button>
+                  </div>
+                  <p className="control-hint">LP module needs deployed pool address. Current default loan address is not a pool.</p>
+                </section>
+              ) : (
+                <div className="liquidity-actions">
+                  <p>Поддерживаю протокол, управляю TVL и выпускаю кредиты заемщикам.</p>
+                  <button className="btn btn-primary" onClick={onDemoFund}>
+                    Пополнить пул
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </section>

@@ -21,6 +21,7 @@ jest.mock('@tonconnect/ui-react', () => ({
   TonConnectButton: () => <button type="button">Connect Wallet</button>,
   useTonWallet: () => null,
   useTonAddress: () => '',
+  useTonConnectUI: () => [{ sendTransaction: jest.fn() }],
 }));
 
 type MockPayload = {
