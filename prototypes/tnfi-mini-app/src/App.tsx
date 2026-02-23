@@ -117,6 +117,13 @@ type OperatorSuggestion = {
 };
 
 type TabMode = 'borrower' | 'liquidity';
+type LiveActionKey = 'setOraclePrice' | 'fundLoan' | 'repay';
+type LiveActionTxStatus = 'ready' | 'signing' | 'submitted' | 'failed';
+type LiveActionTxState = {
+  status: LiveActionTxStatus;
+  note: string;
+  updatedAt: number;
+};
 
 const STEP_CARDS = [
   {
@@ -188,6 +195,21 @@ const SECURITY_PRINCIPLES = [
   'Emergency pause switch',
   'No silent bypass path',
 ] as const;
+
+const LIVE_ACTION_LABEL: Record<LiveActionKey, string> = {
+  setOraclePrice: 'SetOraclePrice',
+  fundLoan: 'FundLoan',
+  repay: 'Repay',
+};
+
+const LIVE_ACTIONS: LiveActionKey[] = ['setOraclePrice', 'fundLoan', 'repay'];
+
+const LIVE_TX_STATUS_LABEL: Record<LiveActionTxStatus, string> = {
+  ready: 'READY',
+  signing: 'SIGNING',
+  submitted: 'SUBMITTED',
+  failed: 'FAILED',
+};
 
 function getInitialTheme(): VisualTheme {
   if (typeof window === 'undefined') {
@@ -376,9 +398,169 @@ function parseTonToNanoSafe(value: string): bigint {
   return nano;
 }
 
+function appendUnsignedBits(target: number[], value: bigint, bitLength: number): void {
+  if (bitLength <= 0) {
+    throw new Error('Invalid bit length.');
+  }
+  const max = BigInt(1) << BigInt(bitLength);
+  if (value < BigInt(0) || value >= max) {
+    throw new Error('Value does not fit into requested bit length.');
+  }
+
+  for (let index = bitLength - 1; index >= 0; index -= 1) {
+    const bit = Number((value >> BigInt(index)) & BigInt(1));
+    target.push(bit);
+  }
+}
+
+function appendSignedBits(target: number[], value: bigint, bitLength: number): void {
+  if (bitLength <= 1) {
+    throw new Error('Signed integer bit length is too small.');
+  }
+  const min = -(BigInt(1) << BigInt(bitLength - 1));
+  const max = (BigInt(1) << BigInt(bitLength - 1)) - BigInt(1);
+  if (value < min || value > max) {
+    throw new Error('Signed value does not fit into requested bit length.');
+  }
+
+  const normalized = value >= BigInt(0) ? value : (BigInt(1) << BigInt(bitLength)) + value;
+  appendUnsignedBits(target, normalized, bitLength);
+}
+
+function bigintToBytes(value: bigint): number[] {
+  if (value < BigInt(0)) {
+    throw new Error('Negative value cannot be converted to bytes.');
+  }
+  if (value === BigInt(0)) {
+    return [];
+  }
+
+  const bytes: number[] = [];
+  let current = value;
+  while (current > BigInt(0)) {
+    bytes.push(Number(current & BigInt(255)));
+    current >>= BigInt(8);
+  }
+  bytes.reverse();
+  return bytes;
+}
+
+function appendCoinsVarUint16(target: number[], value: bigint): void {
+  if (value < BigInt(0)) {
+    throw new Error('Coin value must be non-negative.');
+  }
+  const payloadBytes = bigintToBytes(value);
+  if (payloadBytes.length > 15) {
+    throw new Error('Coin value is too large for VarUInteger16.');
+  }
+
+  appendUnsignedBits(target, BigInt(payloadBytes.length), 4);
+  payloadBytes.forEach((byteValue) => {
+    appendUnsignedBits(target, BigInt(byteValue), 8);
+  });
+}
+
+function bitsToTopUppedBytes(bits: number[]): number[] {
+  const normalized = [...bits];
+  if (normalized.length % 8 !== 0) {
+    normalized.push(1);
+    while (normalized.length % 8 !== 0) {
+      normalized.push(0);
+    }
+  }
+
+  const bytes: number[] = [];
+  for (let cursor = 0; cursor < normalized.length; cursor += 8) {
+    let byteValue = 0;
+    for (let bitIndex = 0; bitIndex < 8; bitIndex += 1) {
+      byteValue = (byteValue << 1) | normalized[cursor + bitIndex];
+    }
+    bytes.push(byteValue);
+  }
+  return bytes;
+}
+
+function crc32c(bytes: number[]): number {
+  let crc = 0xffffffff;
+  bytes.forEach((byteValue) => {
+    crc ^= byteValue;
+    for (let bitIndex = 0; bitIndex < 8; bitIndex += 1) {
+      crc = (crc & 1) !== 0 ? (crc >>> 1) ^ 0x82f63b78 : crc >>> 1;
+    }
+  });
+  return (~crc) >>> 0;
+}
+
+function bytesToBase64(bytes: number[]): string {
+  let binary = '';
+  bytes.forEach((byteValue) => {
+    binary += String.fromCharCode(byteValue);
+  });
+
+  if (typeof btoa === 'function') {
+    return btoa(binary);
+  }
+  return Buffer.from(bytes).toString('base64');
+}
+
+function serializeSingleCellBody(bits: number[]): string {
+  const bitLength = bits.length;
+  const topUppedBytes = bitsToTopUppedBytes(bits);
+  const bitsDescriptor = Math.floor(bitLength / 8) + Math.ceil(bitLength / 8);
+
+  if (bitsDescriptor > 255) {
+    throw new Error('Payload is too large for single-byte descriptor.');
+  }
+
+  const cellBytes = [0x00, bitsDescriptor, ...topUppedBytes];
+  if (cellBytes.length > 255) {
+    throw new Error('Payload is too large for compact BOC header.');
+  }
+
+  const boc = [
+    0xb5,
+    0xee,
+    0x9c,
+    0x72,
+    0x41,
+    0x01,
+    0x01,
+    0x01,
+    0x00,
+    cellBytes.length,
+    0x00,
+    ...cellBytes,
+  ];
+  const checksum = crc32c(boc);
+  boc.push(checksum & 0xff, (checksum >>> 8) & 0xff, (checksum >>> 16) & 0xff, (checksum >>> 24) & 0xff);
+
+  return bytesToBase64(boc);
+}
+
+function buildSetOraclePricePayload(priceNano: bigint, updatedAt: bigint): string {
+  if (priceNano <= BigInt(0)) {
+    throw new Error('Oracle price must be greater than zero.');
+  }
+
+  const bits: number[] = [];
+  appendUnsignedBits(bits, BigInt(2682316731), 32);
+  appendCoinsVarUint16(bits, priceNano);
+  appendSignedBits(bits, updatedAt, 257);
+  return serializeSingleCellBody(bits);
+}
+
 function appendLog(entries: string[], message: string): string[] {
   const stamp = new Date().toLocaleTimeString('ru-RU', { hour12: false });
   return [`${stamp} ${message}`, ...entries].slice(0, 12);
+}
+
+function createInitialLiveActionTxState(): Record<LiveActionKey, LiveActionTxState> {
+  const now = Date.now();
+  return {
+    setOraclePrice: { status: 'ready', note: 'Ready for signing.', updatedAt: now },
+    fundLoan: { status: 'ready', note: 'Ready for signing.', updatedAt: now },
+    repay: { status: 'ready', note: 'Ready for signing.', updatedAt: now },
+  };
 }
 
 function createDemoState(): DemoState {
@@ -462,8 +644,14 @@ function App() {
   const [tonConnectUI] = useTonConnectUI();
   const connectedWallet = useTonWallet();
   const connectedAddress = useTonAddress();
-  const [txBusy, setTxBusy] = useState(false);
+  const [txBusyAction, setTxBusyAction] = useState<string | null>(null);
   const [txNote, setTxNote] = useState('');
+  const [liveActionTx, setLiveActionTx] = useState<Record<LiveActionKey, LiveActionTxState>>(
+    () => createInitialLiveActionTxState(),
+  );
+  const txBusy = txBusyAction !== null;
+  const [liveOraclePriceTon, setLiveOraclePriceTon] = useState('1.000');
+  const [liveOracleTxTon, setLiveOracleTxTon] = useState('0.050');
   const [liveFundTon, setLiveFundTon] = useState('1.000');
   const [liveRepayTon, setLiveRepayTon] = useState('1.000');
   const [poolAddress, setPoolAddress] = useState('');
@@ -620,14 +808,34 @@ function App() {
   }, [mode, refreshSnapshot]);
 
   const sendTonTransaction = useCallback(
-    async (params: { to: string; amountTon: string; payload: string; label: string }) => {
+    async (params: { to: string; amountTon: string; payload: string; label: string; actionKey?: LiveActionKey }) => {
+      const updateActionTx = (status: LiveActionTxStatus, note: string): void => {
+        if (!params.actionKey) {
+          return;
+        }
+        setLiveActionTx((prev) => ({
+          ...prev,
+          [params.actionKey as LiveActionKey]: {
+            status,
+            note,
+            updatedAt: Date.now(),
+          },
+        }));
+      };
+
       const to = params.to.trim();
       if (!connectedWallet || connectedAddress.trim().length === 0) {
-        setError('Connect wallet first.');
+        const message = 'Connect wallet first.';
+        setError(message);
+        setTxNote(message);
+        updateActionTx('failed', message);
         return;
       }
       if (to.length === 0) {
-        setError('Target contract address is empty.');
+        const message = 'Target contract address is empty.';
+        setError(message);
+        setTxNote(message);
+        updateActionTx('failed', message);
         return;
       }
 
@@ -637,12 +845,15 @@ function App() {
       } catch (amountError) {
         const message = amountError instanceof Error ? amountError.message : 'Invalid TON amount';
         setError(message);
+        setTxNote(message);
+        updateActionTx('failed', message);
         return;
       }
 
       setError('');
-      setTxBusy(true);
+      setTxBusyAction(params.actionKey ?? params.label);
       setTxNote(`Signing: ${params.label}...`);
+      updateActionTx('signing', 'Waiting for wallet confirmation...');
       try {
         await tonConnectUI.sendTransaction({
           validUntil: Math.floor(Date.now() / 1000) + 600,
@@ -654,19 +865,53 @@ function App() {
             },
           ],
         });
-        setTxNote(`${params.label} sent. Check wallet and explorer.`);
+        const successNote = `${params.label} submitted. Check wallet and explorer.`;
+        setTxNote(successNote);
+        updateActionTx('submitted', successNote);
         if (mode === 'live') {
           void refreshSnapshot();
         }
       } catch (txError) {
         const message = txError instanceof Error ? txError.message : 'Transaction rejected';
-        setError(`Tx failed: ${message}`);
+        const failNote = `Tx failed: ${message}`;
+        setError(failNote);
+        setTxNote(failNote);
+        updateActionTx('failed', failNote);
       } finally {
-        setTxBusy(false);
+        setTxBusyAction(null);
       }
     },
     [connectedAddress, connectedWallet, mode, refreshSnapshot, tonConnectUI],
   );
+
+  const onLiveSetOraclePrice = useCallback(async () => {
+    let oraclePriceNano: bigint;
+    try {
+      oraclePriceNano = parseTonToNanoSafe(liveOraclePriceTon);
+    } catch (priceError) {
+      const message = priceError instanceof Error ? priceError.message : 'Invalid oracle price amount';
+      setError(message);
+      setTxNote(message);
+      setLiveActionTx((prev) => ({
+        ...prev,
+        setOraclePrice: {
+          status: 'failed',
+          note: message,
+          updatedAt: Date.now(),
+        },
+      }));
+      return;
+    }
+
+    const payload = buildSetOraclePricePayload(oraclePriceNano, BigInt(Math.floor(Date.now() / 1000)));
+    await sendTonTransaction({
+      to: contractAddress,
+      amountTon: liveOracleTxTon,
+      payload,
+      label: 'SetOraclePrice',
+      actionKey: 'setOraclePrice',
+    });
+  }, [contractAddress, liveOraclePriceTon, liveOracleTxTon, sendTonTransaction]);
 
   const onLiveFundLoan = useCallback(async () => {
     await sendTonTransaction({
@@ -674,6 +919,7 @@ function App() {
       amountTon: liveFundTon,
       payload: PAYLOAD_FUND_LOAN,
       label: 'FundLoan',
+      actionKey: 'fundLoan',
     });
   }, [contractAddress, liveFundTon, sendTonTransaction]);
 
@@ -683,6 +929,7 @@ function App() {
       amountTon: liveRepayTon,
       payload: PAYLOAD_REPAY,
       label: 'Repay',
+      actionKey: 'repay',
     });
   }, [contractAddress, liveRepayTon, sendTonTransaction]);
 
@@ -1260,6 +1507,26 @@ function App() {
                     </label>
 
                     <label className="control-field">
+                      <span>Oracle price (TON)</span>
+                      <input
+                        value={liveOraclePriceTon}
+                        onChange={(event) => setLiveOraclePriceTon(event.target.value)}
+                        placeholder="e.g. 1.000"
+                        autoComplete="off"
+                      />
+                    </label>
+
+                    <label className="control-field">
+                      <span>Oracle tx value (TON)</span>
+                      <input
+                        value={liveOracleTxTon}
+                        onChange={(event) => setLiveOracleTxTon(event.target.value)}
+                        placeholder="e.g. 0.050"
+                        autoComplete="off"
+                      />
+                    </label>
+
+                    <label className="control-field">
                       <span>Fund amount (TON)</span>
                       <input
                         value={liveFundTon}
@@ -1291,15 +1558,34 @@ function App() {
                       >
                         TONSCAN
                       </a>
+                      <button className="btn btn-primary" onClick={() => void onLiveSetOraclePrice()} disabled={txBusy || loading}>
+                        {txBusyAction === 'setOraclePrice' ? 'SIGNING...' : 'SET ORACLE'}
+                      </button>
                       <button className="btn btn-primary" onClick={() => void onLiveFundLoan()} disabled={txBusy || loading}>
-                        {txBusy ? 'SIGNING...' : 'FUND LOAN'}
+                        {txBusyAction === 'fundLoan' ? 'SIGNING...' : 'FUND LOAN'}
                       </button>
                       <button className="btn btn-ghost" onClick={() => void onLiveRepay()} disabled={txBusy || loading}>
-                        REPAY
+                        {txBusyAction === 'repay' ? 'SIGNING...' : 'REPAY'}
                       </button>
                       <button className="btn btn-ghost" onClick={() => void onLiveCancelLoan()} disabled={txBusy || loading}>
                         CANCEL
                       </button>
+                    </div>
+                    <div className="tx-status-grid">
+                      {LIVE_ACTIONS.map((actionKey) => {
+                        const actionTx = liveActionTx[actionKey];
+                        return (
+                          <article
+                            key={actionKey}
+                            data-testid={`tx-badge-${actionKey}`}
+                            className={`tx-status-badge tx-status-${actionTx.status}`}
+                          >
+                            <p>{LIVE_ACTION_LABEL[actionKey]}</p>
+                            <strong>{LIVE_TX_STATUS_LABEL[actionTx.status]}</strong>
+                            <small>{actionTx.note}</small>
+                          </article>
+                        );
+                      })}
                     </div>
                     <p className="control-hint">Borrow flow in this MVP: borrower receives funds when lender signs FUND LOAN.</p>
                   </>

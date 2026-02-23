@@ -82,20 +82,41 @@ export async function run(provider: NetworkProvider) {
     provider.ui().write(`Principal: ${principal.toString()} nanotons`);
     provider.ui().write(`Repay amount: ${repayAmount.toString()} nanotons`);
 
-    const alreadyDeployed = await provider.isContractDeployed(nFTCollateralLoan.address);
+    let alreadyDeployed = false;
+    try {
+        alreadyDeployed = await provider.isContractDeployed(nFTCollateralLoan.address);
+    } catch (checkError) {
+        const message =
+            checkError instanceof Error ? checkError.message : 'Unknown RPC error while checking deploy state';
+        provider.ui().write(`Warning: deploy-state check failed (${message}). Proceeding with deploy attempt.`);
+    }
+
     if (alreadyDeployed) {
         provider.ui().write('Contract is already deployed, skipping deploy transaction.');
         return;
     }
 
-    await nFTCollateralLoan.send(
-        provider.sender(),
-        {
-            value: toNano('0.05'),
-        },
-        null,
-    );
-
-    await provider.waitForDeploy(nFTCollateralLoan.address);
-    provider.ui().write(`Deployed NFTCollateralLoan at: ${contractAddress}`);
+    const deployValue = toNano('0.05');
+    const maxAttempts = 2;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+            provider.ui().write(`Deploy attempt ${attempt}/${maxAttempts}...`);
+            await nFTCollateralLoan.send(
+                provider.sender(),
+                {
+                    value: deployValue,
+                },
+                null,
+            );
+            await provider.waitForDeploy(nFTCollateralLoan.address);
+            provider.ui().write(`Deployed NFTCollateralLoan at: ${contractAddress}`);
+            return;
+        } catch (deployError) {
+            const message = deployError instanceof Error ? deployError.message : 'Unknown deploy error';
+            if (attempt >= maxAttempts) {
+                throw deployError;
+            }
+            provider.ui().write(`Deploy attempt ${attempt} failed: ${message}. Retrying...`);
+        }
+    }
 }

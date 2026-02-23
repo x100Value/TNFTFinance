@@ -32,3 +32,6 @@ docs/private/
 # Local tools
 .vscode/
 .idea/
+
+# Local session/cache
+prototypes/tnftfinance-blueprint/temp/

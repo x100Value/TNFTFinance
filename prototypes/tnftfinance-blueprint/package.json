@@ -9,6 +9,7 @@
     "test:artifacts": "node tests/simple-test.js",
     "test:safety": "node -r ts-node/register tests/mvp-safety-check.ts",
     "test:prealpha-modular-smoke": "node -r ts-node/register tests/prealpha-modular-0.0.1.7-smoke.ts",
+    "smoke:testnet": "node -r ts-node/register scripts/runMvpTestnetSmoke.ts",
     "compile": "npx tact -c tact.config.json",
     "deploy:testnet": "npm exec -- blueprint run deployNFTCollateralLoan --testnet --mnemonic"
   },

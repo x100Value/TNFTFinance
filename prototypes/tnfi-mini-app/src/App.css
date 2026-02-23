@@ -708,6 +708,61 @@
   color: var(--text-muted);
 }
 
+.tx-status-grid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.tx-status-badge {
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-card-soft);
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.tx-status-badge p {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.tx-status-badge strong {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+.tx-status-badge small {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.tx-status-ready {
+  border-color: rgba(131, 153, 160, 0.34);
+}
+
+.tx-status-signing {
+  border-color: rgba(177, 127, 83, 0.45);
+  background: rgba(177, 127, 83, 0.1);
+}
+
+.tx-status-submitted {
+  border-color: rgba(76, 168, 137, 0.45);
+  background: rgba(76, 168, 137, 0.1);
+}
+
+.tx-status-failed {
+  border-color: rgba(172, 101, 101, 0.45);
+  background: rgba(172, 101, 101, 0.1);
+}
+
 .btn {
   min-height: 44px;
   padding: 0 16px;

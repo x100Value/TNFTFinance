@@ -1,6 +1,10 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from './App';
+
+const mockSendTransaction = jest.fn();
+let mockWallet: Record<string, unknown> | null = null;
+let mockAddress = '';
 
 jest.mock('@twa-dev/sdk', () => ({
   __esModule: true,
@@ -19,9 +23,9 @@ jest.mock('@twa-dev/sdk', () => ({
 jest.mock('@tonconnect/ui-react', () => ({
   __esModule: true,
   TonConnectButton: () => <button type="button">Connect Wallet</button>,
-  useTonWallet: () => null,
-  useTonAddress: () => '',
-  useTonConnectUI: () => [{ sendTransaction: jest.fn() }],
+  useTonWallet: () => mockWallet,
+  useTonAddress: () => mockAddress,
+  useTonConnectUI: () => [{ sendTransaction: mockSendTransaction }],
 }));
 
 type MockPayload = {
@@ -39,6 +43,9 @@ function jsonResponse(payload: MockPayload): Response {
 }
 
 beforeEach(() => {
+  mockWallet = null;
+  mockAddress = '';
+  mockSendTransaction.mockReset();
   global.fetch = jest.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
     const parsed = JSON.parse(String(init?.body ?? '{}'));
     const method = parsed.method;
@@ -256,4 +263,50 @@ test('switches to live mode and fetches on-chain state', async () => {
   });
 
   expect(global.fetch).toHaveBeenCalled();
+});
+
+test('live mode: marks SetOraclePrice badge as failed when wallet is not connected', async () => {
+  render(<App />);
+
+  fireEvent.click(screen.getByRole('button', { name: /LIVE RPC/i }));
+
+  await waitFor(() => {
+    expect(screen.getAllByText(/ACTIVE/i).length).toBeGreaterThan(0);
+  });
+
+  fireEvent.click(screen.getByRole('button', { name: /SET ORACLE/i }));
+
+  await waitFor(() => {
+    const badge = screen.getByTestId('tx-badge-setOraclePrice');
+    expect(within(badge).getByText(/FAILED/i)).toBeInTheDocument();
+    expect(within(badge).getByText(/Connect wallet first\./i)).toBeInTheDocument();
+  });
+});
+
+test('live mode: sends SetOraclePrice payload via TonConnect', async () => {
+  mockWallet = { provider: 'mock' };
+  mockAddress = 'EQMockWallet000000000000000000000000000000000000000000000';
+  const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_709_251_200_000);
+
+  try {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /LIVE RPC/i }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/ACTIVE/i).length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /SET ORACLE/i }));
+
+    await waitFor(() => {
+      expect(mockSendTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    const txMessage = mockSendTransaction.mock.calls[0][0];
+    expect(txMessage.messages[0].amount).toBe('50000000');
+    expect(txMessage.messages[0].payload).toBe('te6cckEBAQEAKwAAUZ/g57tDuaygAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMvCNQEprs9KA==');
+  } finally {
+    nowSpy.mockRestore();
+  }
 });
