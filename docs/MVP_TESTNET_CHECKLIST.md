@@ -18,7 +18,8 @@ Scope: testnet-only MVP for `NFTCollateralLoan` with safety-first controls.
 - [x] Overdue liquidation path.
 - [x] Borrower cancel path before funding.
 - [x] Getters for loan state and risk state.
-- [ ] NFT escrow and transfer integration (placeholder collateral address only).
+- [x] Collateral lock guard for non-placeholder collateral (`ConfirmCollateralLocked` required before funding).
+- [ ] NFT transfer custody is still external to loan contract (escrow release is workflow-managed).
 
 ## C) Tests and Validation
 - [x] Artifact sanity test (`tests/simple-test.js`).
@@ -26,10 +27,12 @@ Scope: testnet-only MVP for `NFTCollateralLoan` with safety-first controls.
   - fail-closed oracle
   - stale oracle rejection
   - LTV rejection
+  - collateral lock guard
   - repay during pause
   - overdue liquidation
   - timelock governance
   - cancel access control
+- [x] Full modular e2e test (`tests/prealpha-e2e-full-0.0.1.8.ts`) covering oracle + pool + reserve + escrow + auction + risk + loan flows.
 - [x] Local compile + test pass.
 
 ## D) Testnet Ops
@@ -46,10 +49,10 @@ Scope: testnet-only MVP for `NFTCollateralLoan` with safety-first controls.
 - [x] Checkpoint 3 (pre-deploy): timelock enforced before risk updates.
 
 ## F) Open Findings (Must be fixed before mainnet)
-- `HIGH`: Collateral NFT is not escrowed by this MVP contract.
-  - What can break: liquidation cannot actually seize collateral.
-  - Attack/failure scenario: borrower can keep NFT while defaulting.
-  - Minimal safe fix: add on-chain NFT lock/transfer integration and enforce ownership checks.
+- `HIGH`: Loan and escrow are not yet hard-wired by on-chain callbacks.
+  - What can break: operator may run release flow out-of-sequence if off-chain orchestration is wrong.
+  - Attack/failure scenario: escrow release is executed without direct on-chain proof from loan contract state transition.
+  - Minimal safe fix: add escrow->loan lock callback and loan->escrow release commands with strict sender checks.
 - `HIGH`: Admin is single wallet, not multisig + timelock governance.
   - What can break: privileged key compromise impacts protocol controls.
   - Attack/failure scenario: attacker changes risk params or oracle price updates.

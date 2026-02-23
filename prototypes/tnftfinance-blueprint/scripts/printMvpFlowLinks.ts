@@ -1,5 +1,6 @@
 import { Address, beginCell, toNano } from '@ton/core';
 import {
+    storeConfirmCollateralLocked,
     storeFundLoan,
     storeRepay,
     storeSetOraclePrice,
@@ -29,6 +30,7 @@ function main() {
     const now = BigInt(Math.floor(Date.now() / 1000));
     const oraclePrice = toNano(envOrDefault('MVP_ORACLE_PRICE_TON', '1'));
     const oracleMsgValue = toNano(envOrDefault('MVP_ORACLE_TX_TON', '0.05'));
+    const collateralLockMsgValue = toNano(envOrDefault('MVP_COLLATERAL_LOCK_TX_TON', '0.02'));
     const fundMsgValue = toNano(envOrDefault('MVP_FUND_TX_TON', '0.25'));
     const repayMsgValue = toNano(envOrDefault('MVP_REPAY_TX_TON', '0.23'));
 
@@ -37,6 +39,11 @@ function main() {
             name: 'SET_ORACLE_PRICE',
             amount: oracleMsgValue,
             body: beginCell().store(storeSetOraclePrice({ $$type: 'SetOraclePrice', price: oraclePrice, updatedAt: now })),
+        },
+        {
+            name: 'COLLATERAL_LOCK',
+            amount: collateralLockMsgValue,
+            body: beginCell().store(storeConfirmCollateralLocked({ $$type: 'ConfirmCollateralLocked' })),
         },
         {
             name: 'FUND_LOAN',

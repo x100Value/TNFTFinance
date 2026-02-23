@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import {
+    storeConfirmCollateralLocked,
     storeFundLoan,
     storeRepay,
     storeSetOraclePrice,
@@ -26,13 +27,15 @@ type LoanSnapshot = {
     status: number;
     oraclePriceNano: bigint;
     oracleUpdatedAt: number;
+    collateralLocked: boolean;
+    collateralLockedAt: number;
     lastTxHash: string;
     lastTxLt: string;
     fetchedAt: string;
 };
 
 type ActionLog = {
-    action: 'SetOraclePrice' | 'FundLoan' | 'Repay';
+    action: 'SetOraclePrice' | 'ConfirmCollateralLocked' | 'FundLoan' | 'Repay';
     tonLink: string;
     amountNano: string;
     before: LoanSnapshot;
@@ -182,6 +185,8 @@ async function fetchLoanSnapshot(rpcUrl: string, apiKey: string, contractAddress
         status: Number(parseStackBigInt(loanState.stack, 0)),
         oraclePriceNano: parseStackBigInt(loanState.stack, 4),
         oracleUpdatedAt: Number(parseStackBigInt(loanState.stack, 5)),
+        collateralLocked: parseStackBigInt(loanState.stack, 7) > 0n,
+        collateralLockedAt: Number(parseStackBigInt(loanState.stack, 8)),
         lastTxHash: addressInfo.last_transaction_id?.hash ?? '',
         lastTxLt: addressInfo.last_transaction_id?.lt ?? '',
         fetchedAt: new Date().toISOString(),
@@ -214,7 +219,7 @@ async function waitForCondition(
             }
 
             console.log(
-                `[poll ${attempt}] ${title}: status=${statusLabel(snapshot.status)} tx=${shortHash(snapshot.lastTxHash)} oracleUpdatedAt=${snapshot.oracleUpdatedAt}`,
+                `[poll ${attempt}] ${title}: status=${statusLabel(snapshot.status)} tx=${shortHash(snapshot.lastTxHash)} oracleUpdatedAt=${snapshot.oracleUpdatedAt} collateralLocked=${snapshot.collateralLocked}`,
             );
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Unknown polling error';
@@ -235,14 +240,17 @@ async function main() {
     const timeoutMs = envNumber('SMOKE_TIMEOUT_SECONDS', 300) * 1_000;
     const autoContinue = envBoolean('SMOKE_AUTO_CONTINUE', false);
     const dryRun = envBoolean('SMOKE_DRY_RUN', false);
+    const requireCollateralLock = envBoolean('SMOKE_REQUIRE_COLLATERAL_LOCK', false);
 
     const oraclePriceTon = envOrDefault('MVP_ORACLE_PRICE_TON', '1');
     const oracleMsgTon = envOrDefault('MVP_ORACLE_TX_TON', '0.05');
+    const collateralLockMsgTon = envOrDefault('MVP_COLLATERAL_LOCK_TX_TON', '0.02');
     const fundMsgTon = envOrDefault('MVP_FUND_TX_TON', '0.25');
     const repayMsgTon = envOrDefault('MVP_REPAY_TX_TON', '0.23');
 
     const oraclePriceNano = toNano(oraclePriceTon);
     const oracleMsgNano = toNano(oracleMsgTon);
+    const collateralLockMsgNano = toNano(collateralLockMsgTon);
     const fundMsgNano = toNano(fundMsgTon);
     const repayMsgNano = toNano(repayMsgTon);
     const oracleUpdatedAt = BigInt(Math.floor(Date.now() / 1000));
@@ -253,10 +261,16 @@ async function main() {
         .endCell()
         .toBoc({ idx: false })
         .toString('base64url');
+    const collateralLockBody = beginCell()
+        .store(storeConfirmCollateralLocked({ $$type: 'ConfirmCollateralLocked' }))
+        .endCell()
+        .toBoc({ idx: false })
+        .toString('base64url');
     const fundBody = beginCell().store(storeFundLoan({ $$type: 'FundLoan' })).endCell().toBoc({ idx: false }).toString('base64url');
     const repayBody = beginCell().store(storeRepay({ $$type: 'Repay' })).endCell().toBoc({ idx: false }).toString('base64url');
 
     const setOracleLink = toTonLink(contract, oracleMsgNano, setOracleBody);
+    const collateralLockLink = toTonLink(contract, collateralLockMsgNano, collateralLockBody);
     const fundLink = toTonLink(contract, fundMsgNano, fundBody);
     const repayLink = toTonLink(contract, repayMsgNano, repayBody);
 
@@ -265,6 +279,7 @@ async function main() {
     console.log(`Oracle price: ${oraclePriceNano.toString()} nanotons`);
     console.log('');
     console.log(`SET_ORACLE_PRICE_LINK=${setOracleLink}`);
+    console.log(`COLLATERAL_LOCK_LINK=${collateralLockLink}`);
     console.log(`FUND_LOAN_LINK=${fundLink}`);
     console.log(`REPAY_LINK=${repayLink}`);
     console.log('');
@@ -280,7 +295,7 @@ async function main() {
     try {
         let snapshot = await fetchLoanSnapshot(rpcUrl, apiKey, contractAddress);
         console.log(
-            `Initial on-chain status: ${statusLabel(snapshot.status)}; tx=${shortHash(snapshot.lastTxHash)}; oracleUpdatedAt=${snapshot.oracleUpdatedAt}`,
+            `Initial on-chain status: ${statusLabel(snapshot.status)}; tx=${shortHash(snapshot.lastTxHash)}; oracleUpdatedAt=${snapshot.oracleUpdatedAt}; collateralLocked=${snapshot.collateralLocked}`,
         );
         if (snapshot.status !== 0) {
             throw new Error(
@@ -328,8 +343,32 @@ async function main() {
         });
         console.log(`SetOraclePrice confirmed in ${oracleResult.waitMs} ms; tx=${shortHash(snapshot.lastTxHash)}`);
 
+        if (requireCollateralLock && !snapshot.collateralLocked) {
+            const beforeCollateral = snapshot;
+            await askStep('STEP 2 / ConfirmCollateralLocked', collateralLockLink);
+            const collateralResult = await waitForCondition(
+                'ConfirmCollateralLocked confirmation',
+                rpcUrl,
+                apiKey,
+                contractAddress,
+                pollIntervalMs,
+                timeoutMs,
+                (current) => current.status === 0 && current.collateralLocked && current.lastTxLt !== beforeCollateral.lastTxLt,
+            );
+            snapshot = collateralResult.snapshot;
+            actionsLog.push({
+                action: 'ConfirmCollateralLocked',
+                tonLink: collateralLockLink,
+                amountNano: collateralLockMsgNano.toString(),
+                before: beforeCollateral,
+                after: snapshot,
+                waitMs: collateralResult.waitMs,
+            });
+            console.log(`ConfirmCollateralLocked confirmed in ${collateralResult.waitMs} ms; tx=${shortHash(snapshot.lastTxHash)}`);
+        }
+
         const beforeFund = snapshot;
-        await askStep('STEP 2 / FundLoan', fundLink);
+        await askStep('STEP 3 / FundLoan', fundLink);
         const fundResult = await waitForCondition(
             'FundLoan confirmation',
             rpcUrl,
@@ -351,7 +390,7 @@ async function main() {
         console.log(`FundLoan confirmed in ${fundResult.waitMs} ms; tx=${shortHash(snapshot.lastTxHash)}`);
 
         const beforeRepay = snapshot;
-        await askStep('STEP 3 / Repay', repayLink);
+        await askStep('STEP 4 / Repay', repayLink);
         const repayResult = await waitForCondition(
             'Repay confirmation',
             rpcUrl,
@@ -384,6 +423,7 @@ async function main() {
             oraclePriceNano: oraclePriceNano.toString(),
             amountsNano: {
                 setOraclePrice: oracleMsgNano.toString(),
+                collateralLock: collateralLockMsgNano.toString(),
                 fundLoan: fundMsgNano.toString(),
                 repay: repayMsgNano.toString(),
             },
@@ -410,4 +450,3 @@ main().catch((error) => {
     console.error(`SMOKE FAIL: ${message}`);
     process.exitCode = 1;
 });
-

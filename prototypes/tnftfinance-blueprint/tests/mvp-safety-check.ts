@@ -17,6 +17,7 @@ type DeployedLoan = {
     borrower: SandboxContract<TreasuryContract>;
     lender: SandboxContract<TreasuryContract>;
     outsider: SandboxContract<TreasuryContract>;
+    collateralNotifier: SandboxContract<TreasuryContract>;
     contract: SandboxContract<NFTCollateralLoan>;
     principal: bigint;
     repayAmount: bigint;
@@ -56,6 +57,8 @@ async function deployLoan(overrides?: {
     maxLtvBps?: bigint;
     oracleMaxAge?: bigint;
     riskTimelock?: bigint;
+    collateralNft?: Address;
+    useDedicatedCollateralNotifier?: boolean;
 }): Promise<DeployedLoan> {
     const blockchain = await Blockchain.create();
     blockchain.now = 1_771_577_000;
@@ -64,6 +67,7 @@ async function deployLoan(overrides?: {
     const borrower = await blockchain.treasury('borrower');
     const lender = await blockchain.treasury('lender');
     const outsider = await blockchain.treasury('outsider');
+    const collateralNotifier = await blockchain.treasury('collateralNotifier');
 
     const principal = overrides?.principal ?? toNano('0.2');
     const repayAmount = overrides?.repayAmount ?? toNano('0.22');
@@ -71,12 +75,15 @@ async function deployLoan(overrides?: {
     const maxLtvBps = overrides?.maxLtvBps ?? 5000n;
     const oracleMaxAge = overrides?.oracleMaxAge ?? 600n;
     const riskTimelock = overrides?.riskTimelock ?? 86400n;
+    const collateralNft =
+        overrides?.collateralNft ??
+        (overrides?.useDedicatedCollateralNotifier ? collateralNotifier.address : borrower.address);
 
     const contract = blockchain.openContract(
         await NFTCollateralLoan.fromInit(
             owner.address,
             borrower.address,
-            borrower.address,
+            collateralNft,
             principal,
             repayAmount,
             termSeconds,
@@ -98,6 +105,7 @@ async function deployLoan(overrides?: {
         borrower,
         lender,
         outsider,
+        collateralNotifier,
         contract,
         principal,
         repayAmount,
@@ -298,6 +306,38 @@ async function testCancelOpenLoan() {
     assert.equal(state.status, STATUS_CANCELLED, 'status must be CANCELLED');
 }
 
+async function testCollateralLockGuard() {
+    const ctx = await deployLoan({ useDedicatedCollateralNotifier: true });
+    const nowTs = BigInt(ctx.blockchain.now ?? 0);
+
+    await ctx.contract.send(
+        ctx.owner.getSender(),
+        { value: toNano('0.02') },
+        { $$type: 'SetOraclePrice', price: toNano('1'), updatedAt: nowTs },
+    );
+
+    const fundWithoutLock = await ctx.contract.send(
+        ctx.lender.getSender(),
+        { value: ctx.principal },
+        { $$type: 'FundLoan' },
+    );
+    assertContractTxFailed(fundWithoutLock, ctx.contract.address, 'fund without collateral lock');
+
+    const lockConfirm = await ctx.contract.send(
+        ctx.collateralNotifier.getSender(),
+        { value: toNano('0.02') },
+        { $$type: 'ConfirmCollateralLocked' },
+    );
+    assertContractTxSuccess(lockConfirm, ctx.contract.address, 'confirm collateral lock');
+
+    const fundWithLock = await ctx.contract.send(
+        ctx.lender.getSender(),
+        { value: ctx.principal },
+        { $$type: 'FundLoan' },
+    );
+    assertContractTxSuccess(fundWithLock, ctx.contract.address, 'fund with collateral lock');
+}
+
 async function main() {
     await testOracleFailClosedAndLtv();
     console.log('PASS: oracle fail-closed and LTV guard');
@@ -313,6 +353,9 @@ async function main() {
 
     await testCancelOpenLoan();
     console.log('PASS: cancel flow access control');
+
+    await testCollateralLockGuard();
+    console.log('PASS: collateral lock guard');
 
     console.log('PASS: MVP safety checks completed');
 }

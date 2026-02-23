@@ -1,11 +1,7 @@
 import { Address, toNano } from '@ton/core';
 import { NetworkProvider } from '@ton/blueprint';
 import { NFTCollateralLoan } from '../build/NFTCollateralLoan/NFTCollateralLoan_NFTCollateralLoan';
-
-function envOrDefault(name: string, fallback: string): string {
-    const raw = process.env[name];
-    return raw && raw.trim().length > 0 ? raw.trim() : fallback;
-}
+import { envOrDefault, sendWithRetry } from './lib/sendRetry';
 
 function envPositiveInt(name: string, fallback: number): number {
     const raw = process.env[name];
@@ -43,11 +39,13 @@ export async function run(provider: NetworkProvider) {
     provider.ui().write(`Oracle updatedAt: ${updatedAt.toString()} (skew ${skewSeconds}s)`);
     provider.ui().write(`Tx value: ${txValue.toString()} nanotons`);
 
-    await contract.send(
-        provider.sender(),
-        { value: txValue },
-        { $$type: 'SetOraclePrice', price: oraclePrice, updatedAt },
-    );
+    await sendWithRetry(provider.ui(), 'SetOraclePrice', async () => {
+        await contract.send(
+            provider.sender(),
+            { value: txValue },
+            { $$type: 'SetOraclePrice', price: oraclePrice, updatedAt },
+        );
+    });
 
     provider.ui().write('SetOraclePrice transaction sent.');
 }

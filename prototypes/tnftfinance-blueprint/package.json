@@ -5,13 +5,15 @@
   "main": "index.js",
   "scripts": {
     "build": "npx tact -c tact.config.json",
-    "test": "npm run test:artifacts && npm run test:safety && npm run test:prealpha-modular-smoke",
+    "test": "npm run test:artifacts && npm run test:safety && npm run test:prealpha-modular-smoke && npm run test:prealpha-e2e-full",
     "test:artifacts": "node tests/simple-test.js",
     "test:safety": "node -r ts-node/register tests/mvp-safety-check.ts",
     "test:prealpha-modular-smoke": "node -r ts-node/register tests/prealpha-modular-0.0.1.7-smoke.ts",
+    "test:prealpha-e2e-full": "node -r ts-node/register tests/prealpha-e2e-full-0.0.1.8.ts",
     "smoke:testnet": "node -r ts-node/register scripts/runMvpTestnetSmoke.ts",
     "compile": "npx tact -c tact.config.json",
-    "deploy:testnet": "npm exec -- blueprint run deployNFTCollateralLoan --testnet --mnemonic"
+    "deploy:testnet": "npm exec -- blueprint run deployNFTCollateralLoan --testnet --mnemonic",
+    "collateral:lock:testnet": "npm exec -- blueprint run sendCollateralLocked --testnet --tonconnect"
   },
   "keywords": [
     "ton",

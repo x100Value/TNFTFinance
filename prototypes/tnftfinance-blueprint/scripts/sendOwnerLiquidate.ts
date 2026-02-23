@@ -1,11 +1,7 @@
 import { Address, toNano } from '@ton/core';
 import { NetworkProvider } from '@ton/blueprint';
 import { NFTCollateralLoan } from '../build/NFTCollateralLoan/NFTCollateralLoan_NFTCollateralLoan';
-
-function envOrDefault(name: string, fallback: string): string {
-    const raw = process.env[name];
-    return raw && raw.trim().length > 0 ? raw.trim() : fallback;
-}
+import { envOrDefault, sendWithRetry } from './lib/sendRetry';
 
 export async function run(provider: NetworkProvider) {
     const sender = provider.sender().address;
@@ -24,6 +20,8 @@ export async function run(provider: NetworkProvider) {
     provider.ui().write(`Contract: ${contractAddress.toString()}`);
     provider.ui().write(`Tx value: ${txValue.toString()} nanotons`);
 
-    await contract.send(provider.sender(), { value: txValue }, { $$type: 'Liquidate' });
+    await sendWithRetry(provider.ui(), 'Liquidate', async () => {
+        await contract.send(provider.sender(), { value: txValue }, { $$type: 'Liquidate' });
+    });
     provider.ui().write('Liquidate transaction sent.');
 }

@@ -15,6 +15,8 @@ message SetOraclePrice {
     updatedAt: Int;
 }
 
+message ConfirmCollateralLocked {}
+
 message FundLoan {}
 message Repay {}
 message Liquidate {}
@@ -39,6 +41,8 @@ struct LoanState {
     oraclePrice: Int as coins;
     oracleUpdatedAt: Int;
     paused: Bool;
+    collateralLocked: Bool;
+    collateralLockedAt: Int;
 }
 
 struct RiskState {
@@ -72,6 +76,8 @@ contract NFTCollateralLoan {
 
     oraclePrice: Int as coins;
     oracleUpdatedAt: Int;
+    collateralLocked: Bool;
+    collateralLockedAt: Int;
 
     pendingMaxLtvBps: Int;
     pendingOracleMaxAge: Int;
@@ -115,6 +121,8 @@ contract NFTCollateralLoan {
 
         self.oraclePrice = 0;
         self.oracleUpdatedAt = 0;
+        self.collateralLocked = false;
+        self.collateralLockedAt = 0;
 
         self.pendingMaxLtvBps = 0;
         self.pendingOracleMaxAge = 0;
@@ -136,10 +144,20 @@ contract NFTCollateralLoan {
         self.oracleUpdatedAt = msg.updatedAt;
     }
 
+    receive(msg: ConfirmCollateralLocked) {
+        let _ = msg;
+        require(self.status == STATUS_OPEN, "loan not open");
+        require(sender() == self.collateralNft, "only collateral notifier");
+        require(!self.collateralLocked, "collateral already locked");
+        self.collateralLocked = true;
+        self.collateralLockedAt = now();
+    }
+
     receive(msg: FundLoan) {
         let _ = msg;
         require(self.status == STATUS_OPEN, "loan not open");
         require(!self.paused, "loan is paused");
+        require(self.isCollateralReady(), "collateral not locked");
         require(self.isOracleFresh(), "oracle stale");
 
         let maxBorrow: Int = self.mulDivDown(self.oraclePrice, self.maxLtvBps, BPS_DENOMINATOR);
@@ -258,7 +276,9 @@ contract NFTCollateralLoan {
             dueAt: self.dueAt,
             oraclePrice: self.oraclePrice,
             oracleUpdatedAt: self.oracleUpdatedAt,
-            paused: self.paused
+            paused: self.paused,
+            collateralLocked: self.collateralLocked,
+            collateralLockedAt: self.collateralLockedAt
         };
     }
 
@@ -300,5 +320,13 @@ contract NFTCollateralLoan {
         }
 
         return (now() - self.oracleUpdatedAt) <= self.oracleMaxAge;
+    }
+
+    fun isCollateralReady(): Bool {
+        // Backward-compatible placeholder mode: collateralNft == borrower.
+        if (self.collateralNft == self.borrower) {
+            return true;
+        }
+        return self.collateralLocked;
     }
 }
