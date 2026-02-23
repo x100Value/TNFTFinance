@@ -127,7 +127,8 @@ function Invoke-BlueprintRun {
 
     Push-Location $ProjectDir
     try {
-        & npm exec -- blueprint run $ScriptName --testnet --mnemonic
+        $cmd = "npm exec -- blueprint run $ScriptName --testnet --mnemonic"
+        & cmd /c $cmd
         if ($LASTEXITCODE -ne 0) {
             throw "Blueprint script failed: $ScriptName"
         }
@@ -150,17 +151,21 @@ function Deploy-Loan {
 
     Push-Location $ProjectDir
     try {
-        $output = npm exec -- blueprint run deployNFTCollateralLoan --testnet --mnemonic 2>&1
+        $cmd = "npm exec -- blueprint run deployNFTCollateralLoan --testnet --mnemonic"
+        $output = & cmd /c $cmd 2>&1
         $output | Write-Output
         if ($LASTEXITCODE -ne 0) {
             throw "Deploy failed"
         }
 
         $targetLine = $output | Select-String "Target address:" | Select-Object -First 1
-        if (-not $targetLine) {
-            throw "Could not parse target address from deploy output"
+        $deployedLine = $output | Select-String "Deployed NFTCollateralLoan at:" | Select-Object -First 1
+        $line = if ($targetLine) { $targetLine.ToString() } elseif ($deployedLine) { $deployedLine.ToString() } else { "" }
+        $m = [regex]::Match($line, '(E[QkU][A-Za-z0-9_\-]{30,})')
+        if (-not $m.Success) {
+            throw "Could not parse contract address from deploy output"
         }
-        $address = $targetLine.ToString().Split(":")[-1].Trim()
+        $address = $m.Groups[1].Value.Trim()
         return $address
     }
     finally {
@@ -191,7 +196,7 @@ $env:MVP_SEND_RETRY_DELAY_MS = "3000"
 Write-Host "=== Compile ===" -ForegroundColor Cyan
 Push-Location $projectDir
 try {
-    npm run compile
+    & cmd /c "npm run compile"
     if ($LASTEXITCODE -ne 0) {
         throw "Compile failed"
     }
