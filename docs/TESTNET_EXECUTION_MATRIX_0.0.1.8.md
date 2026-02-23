@@ -10,6 +10,17 @@ Network: TON testnet
   - `$env:MVP_SEND_RETRIES='5'`
   - `$env:MVP_SEND_RETRY_DELAY_MS='3000'`
 
+## One-command Runner
+From repo root:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-testnet-full-matrix.ps1
+```
+What it does:
+- compiles contracts,
+- runs REPAID branch deploy + owner steps and waits for borrower repay,
+- runs LIQUIDATED branch deploy + owner steps + overdue + liquidation,
+- validates on-chain statuses.
+
 ## Flow A: Repaid Branch (`OPEN -> FUNDED -> REPAID`)
 1. Deploy fresh loan:
    - Set:

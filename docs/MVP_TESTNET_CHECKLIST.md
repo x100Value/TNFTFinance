@@ -42,6 +42,7 @@ Scope: testnet-only MVP for `NFTCollateralLoan` with safety-first controls.
 - [x] Smoke runner script added (`npm run smoke:testnet` in `prototypes/tnftfinance-blueprint`).
 - [x] Smoke dry run command documented (`SMOKE_DRY_RUN=true npm run smoke:testnet`).
 - [x] Smoke full-run prerequisites documented (`MVP_CONTRACT_ADDRESS` must be `OPEN`, `TONCENTER_API_KEY` recommended).
+- [x] Full testnet matrix runner added (`scripts/run-testnet-full-matrix.ps1`).
 
 ## E) Security Checkpoints (Periodic)
 - [x] Checkpoint 1 (design): no unauthorized state writes in funding/repay paths.
