@@ -77,7 +77,7 @@ function Invoke-ToncenterRpc {
     }
 }
 
-function Get-LoanStatus {
+function Get-LoanState {
     param(
         [string]$RpcUrl,
         [string]$Address
@@ -91,7 +91,16 @@ function Get-LoanStatus {
 
     $stack = $result.stack
     $statusRaw = $stack[0][1]
-    return Parse-Status -Raw $statusRaw
+    $dueRaw = $stack[3][1]
+    $startedRaw = $stack[2][1]
+    $status = Parse-Status -Raw $statusRaw
+    $dueAt = Parse-Status -Raw $dueRaw
+    $startedAt = Parse-Status -Raw $startedRaw
+    return @{
+        Status   = $status
+        DueAt    = $dueAt
+        StartedAt = $startedAt
+    }
 }
 
 function Wait-LoanStatus {
@@ -105,17 +114,46 @@ function Wait-LoanStatus {
 
     $started = Get-Date
     while ($true) {
-        $status = Get-LoanStatus -RpcUrl $RpcUrl -Address $Address
-        if ($status -eq $ExpectedStatus) {
+        $state = Get-LoanState -RpcUrl $RpcUrl -Address $Address
+        if ($state.Status -eq $ExpectedStatus) {
             return
         }
 
         $elapsed = (Get-Date) - $started
         if ($elapsed.TotalSeconds -ge $TimeoutSeconds) {
-            throw "Timeout waiting status=$ExpectedStatus for $Address (current=$status)"
+            throw "Timeout waiting status=$ExpectedStatus for $Address (current=$($state.Status))"
         }
 
         Start-Sleep -Seconds $PollSeconds
+    }
+}
+
+function Wait-LoanOverdue {
+    param(
+        [string]$RpcUrl,
+        [string]$Address,
+        [int]$SafetySeconds = 5,
+        [int]$TimeoutSeconds = 600
+    )
+
+    $started = Get-Date
+    while ($true) {
+        $state = Get-LoanState -RpcUrl $RpcUrl -Address $Address
+        if ($state.Status -ne 1) {
+            throw "Loan $Address is not FUNDED while waiting overdue (status=$($state.Status))"
+        }
+
+        $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        if ($now -gt ($state.DueAt + $SafetySeconds)) {
+            return
+        }
+
+        $elapsed = (Get-Date) - $started
+        if ($elapsed.TotalSeconds -ge $TimeoutSeconds) {
+            throw "Timeout waiting overdue for $Address (now=$now dueAt=$($state.DueAt))"
+        }
+
+        Start-Sleep -Seconds 4
     }
 }
 
@@ -211,12 +249,13 @@ $env:MVP_CONTRACT_ADDRESS = $repaidAddress
 Write-Host "REPAID_CONTRACT=$repaidAddress"
 Invoke-BlueprintRun -ProjectDir $projectDir -ScriptName "sendOwnerSetOracle"
 Invoke-BlueprintRun -ProjectDir $projectDir -ScriptName "sendOwnerFundLoan"
+Wait-LoanStatus -RpcUrl $rpcUrl -Address $repaidAddress -ExpectedStatus 1 -TimeoutSeconds 180 -PollSeconds 6
 Write-Host "Now execute repay from borrower wallet (tonconnect):" -ForegroundColor Yellow
 Write-Host "cd $projectDir"
 Write-Host "  `$env:MVP_CONTRACT_ADDRESS='$repaidAddress'"
 Write-Host "  npm exec -- blueprint run sendRepay --testnet --tonconnect"
 Write-Host "Waiting for status REPAID (2)..."
-Wait-LoanStatus -RpcUrl $rpcUrl -Address $repaidAddress -ExpectedStatus 2 -TimeoutSeconds 600 -PollSeconds 8
+Wait-LoanStatus -RpcUrl $rpcUrl -Address $repaidAddress -ExpectedStatus 2 -TimeoutSeconds 1800 -PollSeconds 8
 Write-Host "Branch A PASS: status=REPAID" -ForegroundColor Green
 
 Write-Host "=== Branch B: LIQUIDATED ===" -ForegroundColor Cyan
@@ -225,7 +264,9 @@ $env:MVP_CONTRACT_ADDRESS = $liquidatedAddress
 Write-Host "LIQUIDATED_CONTRACT=$liquidatedAddress"
 Invoke-BlueprintRun -ProjectDir $projectDir -ScriptName "sendOwnerSetOracle"
 Invoke-BlueprintRun -ProjectDir $projectDir -ScriptName "sendOwnerFundLoan"
-Start-Sleep -Seconds 130
+Wait-LoanStatus -RpcUrl $rpcUrl -Address $liquidatedAddress -ExpectedStatus 1 -TimeoutSeconds 180 -PollSeconds 6
+Write-Host "Waiting until loan is overdue..." -ForegroundColor Yellow
+Wait-LoanOverdue -RpcUrl $rpcUrl -Address $liquidatedAddress -SafetySeconds 5 -TimeoutSeconds 900
 Invoke-BlueprintRun -ProjectDir $projectDir -ScriptName "sendOwnerLiquidate"
 Wait-LoanStatus -RpcUrl $rpcUrl -Address $liquidatedAddress -ExpectedStatus 3 -TimeoutSeconds 300 -PollSeconds 8
 Write-Host "Branch B PASS: status=LIQUIDATED" -ForegroundColor Green
