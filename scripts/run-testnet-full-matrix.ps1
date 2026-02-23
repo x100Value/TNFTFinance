@@ -39,6 +39,19 @@ function Parse-Status {
     return [int]$Raw
 }
 
+function Status-Label {
+    param([int]$Status)
+
+    switch ($Status) {
+        0 { return "OPEN" }
+        1 { return "FUNDED" }
+        2 { return "REPAID" }
+        3 { return "LIQUIDATED" }
+        4 { return "CANCELLED" }
+        default { return "UNKNOWN($Status)" }
+    }
+}
+
 function Invoke-ToncenterRpc {
     param(
         [string]$RpcUrl,
@@ -74,6 +87,24 @@ function Invoke-ToncenterRpc {
             }
             Start-Sleep -Seconds $RetryDelaySeconds
         }
+    }
+}
+
+function Get-AddressMeta {
+    param(
+        [string]$RpcUrl,
+        [string]$Address
+    )
+
+    $result = Invoke-ToncenterRpc -RpcUrl $RpcUrl -Method "getAddressInformation" -Params @{
+        address = $Address
+    }
+
+    return @{
+        State      = $result.state
+        Balance    = $result.balance
+        LastTxHash = $result.last_transaction_id.hash
+        LastTxLt   = $result.last_transaction_id.lt
     }
 }
 
@@ -214,7 +245,9 @@ function Deploy-Loan {
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $projectDir = Join-Path $repoRoot "prototypes\tnftfinance-blueprint"
 $envLocal = Join-Path $repoRoot ".env.local"
+$deploymentsDir = Join-Path $repoRoot "docs\deployments"
 $rpcUrl = if ($env:TONCENTER_RPC_URL) { $env:TONCENTER_RPC_URL } else { "https://testnet.toncenter.com/api/v2/jsonRPC" }
+$runStartedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
 Import-EnvFile -Path $envLocal
 
@@ -274,4 +307,69 @@ Write-Host "Branch B PASS: status=LIQUIDATED" -ForegroundColor Green
 Write-Host "=== Summary ===" -ForegroundColor Cyan
 Write-Host "REPAID_CONTRACT=$repaidAddress"
 Write-Host "LIQUIDATED_CONTRACT=$liquidatedAddress"
+
+$repaidState = Get-LoanState -RpcUrl $rpcUrl -Address $repaidAddress
+$liquidatedState = Get-LoanState -RpcUrl $rpcUrl -Address $liquidatedAddress
+$repaidMeta = Get-AddressMeta -RpcUrl $rpcUrl -Address $repaidAddress
+$liquidatedMeta = Get-AddressMeta -RpcUrl $rpcUrl -Address $liquidatedAddress
+$repaidLabel = Status-Label -Status $repaidState.Status
+$liquidatedLabel = Status-Label -Status $liquidatedState.Status
+
+New-Item -ItemType Directory -Force -Path $deploymentsDir | Out-Null
+$stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$jsonPath = Join-Path $deploymentsDir "testnet-matrix-$stamp.json"
+$mdPath = Join-Path $deploymentsDir "testnet-matrix-$stamp.md"
+$generatedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+
+$report = @{
+    generatedAtUtc = $generatedAt
+    startedAtUtc = $runStartedAt
+    rpcUrl = $rpcUrl
+    branchRepaid = @{
+        contractAddress = $repaidAddress
+        finalStatus = $repaidState.Status
+        finalStatusLabel = $repaidLabel
+        startedAt = $repaidState.StartedAt
+        dueAt = $repaidState.DueAt
+        accountState = $repaidMeta.State
+        lastTxHash = $repaidMeta.LastTxHash
+        lastTxLt = $repaidMeta.LastTxLt
+    }
+    branchLiquidated = @{
+        contractAddress = $liquidatedAddress
+        finalStatus = $liquidatedState.Status
+        finalStatusLabel = $liquidatedLabel
+        startedAt = $liquidatedState.StartedAt
+        dueAt = $liquidatedState.DueAt
+        accountState = $liquidatedMeta.State
+        lastTxHash = $liquidatedMeta.LastTxHash
+        lastTxLt = $liquidatedMeta.LastTxLt
+    }
+}
+
+$report | ConvertTo-Json -Depth 8 | Set-Content -Path $jsonPath -Encoding UTF8
+
+$md = @(
+    "# Testnet Full Matrix Run",
+    "",
+    "Generated (UTC): $generatedAt",
+    "Started (UTC): $runStartedAt",
+    "",
+    "## Branch A: Repaid",
+    "- Contract: $repaidAddress",
+    "- Final status: $($repaidState.Status) ($repaidLabel)",
+    "- Last tx hash: $($repaidMeta.LastTxHash)",
+    "- Tonscan: https://testnet.tonscan.org/address/$repaidAddress",
+    "",
+    "## Branch B: Liquidated",
+    "- Contract: $liquidatedAddress",
+    "- Final status: $($liquidatedState.Status) ($liquidatedLabel)",
+    "- Last tx hash: $($liquidatedMeta.LastTxHash)",
+    "- Tonscan: https://testnet.tonscan.org/address/$liquidatedAddress",
+    ""
+)
+$md | Set-Content -Path $mdPath -Encoding UTF8
+
+Write-Host "JSON report: $jsonPath" -ForegroundColor Green
+Write-Host "MD report: $mdPath" -ForegroundColor Green
 Write-Host "Testnet full matrix completed." -ForegroundColor Green

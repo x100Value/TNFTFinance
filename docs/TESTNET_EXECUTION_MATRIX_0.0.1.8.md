@@ -19,7 +19,8 @@ What it does:
 - compiles contracts,
 - runs REPAID branch deploy + owner steps and waits for borrower repay,
 - runs LIQUIDATED branch deploy + owner steps + overdue + liquidation,
-- validates on-chain statuses.
+- validates on-chain statuses,
+- writes run reports to `docs/deployments/testnet-matrix-YYYYMMDD-HHmmss.{json,md}`.
 
 ## Flow A: Repaid Branch (`OPEN -> FUNDED -> REPAID`)
 1. Deploy fresh loan:
