@@ -153,7 +153,7 @@ function Deploy-Loan {
     try {
         $cmd = "npm exec -- blueprint run deployNFTCollateralLoan --testnet --mnemonic"
         $output = & cmd /c $cmd 2>&1
-        $output | Write-Output
+        $output | ForEach-Object { Write-Host $_ }
         if ($LASTEXITCODE -ne 0) {
             throw "Deploy failed"
         }
@@ -166,7 +166,7 @@ function Deploy-Loan {
             throw "Could not parse contract address from deploy output"
         }
         $address = $m.Groups[1].Value.Trim()
-        return $address
+        return [string]$address
     }
     finally {
         Pop-Location
