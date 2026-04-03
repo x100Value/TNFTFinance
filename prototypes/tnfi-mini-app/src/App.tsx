@@ -136,13 +136,13 @@ const STEP_CARDS = [
   },
   {
     title: 'Получил деньги',
-    detail: 'Решил финансировать или взять NFT-залог, получил и отследил сумму.',
+    detail: 'Решил финансировать или взять NFT/Telegram Gift под залог, получил и отследил сумму.',
   },
 ];
 
 const BORROWER_CABINETS = [
   { title: 'Личный счёт заемщика', detail: 'Смотрю доступный LTV, срок, APR и решения по части repay.', status: 'Готов к funding' },
-  { title: 'Коллекция NFT', detail: 'Выбран NFT + оценка, цена «сборов» и срок из oracle.', status: '12.8 TON залога' },
+  { title: 'NFT & Telegram Gifts', detail: 'Выбран NFT или Telegram Gift + оценка, цена и срок из oracle.', status: '12.8 TON залога' },
 ];
 
 const LIQUIDITY_CABINETS = [
@@ -159,6 +159,27 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const DEMO_NFTS: DemoNft[] = [
+  {
+    id: 'gift-01',
+    name: 'Precious Pepe',
+    collection: 'Telegram Gifts',
+    estimatedTon: 18.5,
+    address: 'EQDemoTelegramGift0001',
+  },
+  {
+    id: 'gift-02',
+    name: 'Diamond Hamster',
+    collection: 'Telegram Gifts',
+    estimatedTon: 42.0,
+    address: 'EQDemoTelegramGift0002',
+  },
+  {
+    id: 'gift-03',
+    name: 'Golden Star',
+    collection: 'Telegram Gifts',
+    estimatedTon: 7.3,
+    address: 'EQDemoTelegramGift0003',
+  },
   {
     id: 'nft-01',
     name: 'Wall Street Card #01',
@@ -1344,8 +1365,8 @@ function App() {
           <h1>TNFT Credit Console</h1>
           <p className="subtitle">
             {mode === 'demo'
-              ? 'Offline sandbox with fan tokens: test collateral, balances and credit decisions without testnet.'
-              : 'Strict read-only surface for testnet MVP lending flows.'}
+              ? 'Offline sandbox: test NFT & Telegram Gift collateral, balances and credit decisions without testnet.'
+              : 'Read-only surface for testnet NFT & Telegram Gift lending flows.'}
           </p>
           <div className="security-command">
             <div className="security-command-head">
